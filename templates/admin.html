@@ -1,0 +1,1444 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BOB JUICE — Admin</title>
+  <link rel="stylesheet" href="/static/app.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <script src="/static/bob-auth.js"></script>
+  <script src="/static/bob-tab-session.js"></script>
+  <script src="/static/bob-ui-guards.js"></script>
+</head>
+<body>
+
+<div id="access-denied" class="overlay hidden">
+  <div class="modal access-denied">
+    <div class="icon">🔒</div>
+    <h2 style="color:var(--danger);font-weight:800">Access Denied</h2>
+    <p style="color:var(--text-secondary)">You do not have admin dashboard access.</p>
+    <button id="go-pos" class="btn btn-primary btn-lg" style="width:100%;margin-top:1rem">Go to Sales POS</button>
+  </div>
+</div>
+
+<div id="admin-app" class="hidden" style="display:flex;min-height:100vh">
+  <aside class="sidebar">
+    <div style="padding:1.25rem;text-align:center;border-bottom:1px solid var(--border)">
+      <div class="brand-logo-wrap brand-logo-wrap--sidebar"><img src="/static/logo_circular.png" alt="BOB JUICE" class="brand-logo brand-logo--sidebar" style="border-radius:50%!important;object-fit:cover!important;width:60px!important;height:60px!important;border:2px solid #334e4e!important;display:block;margin:0 auto;" /></div>
+      <div id="sidebar-user" style="font-size:.75rem;color:#9ca3af;margin-top:.5rem"></div>
+    </div>
+    <nav id="sidebar-nav" class="sidebar-nav"></nav>
+    <div style="padding:.75rem;border-top:1px solid var(--border)">
+      <button id="theme-toggle" class="theme-toggle" style="margin:0 auto .75rem;display:block" title="Toggle theme"></button>
+      <a href="/" class="sidebar-link" style="text-align:center;color:var(--accent)">← Sales POS</a>
+      <button id="btn-logout" class="sidebar-link" style="color:var(--danger);margin-top:.25rem">Logout</button>
+    </div>
+  </aside>
+
+  <div class="admin-main">
+    <main class="admin-content">
+
+      <section id="panel-reports" class="panel active">
+        <h2 style="margin:0 0 1rem;font-weight:800">Sales Reports</h2>
+        <div style="display:flex;flex-wrap:wrap;gap:.75rem;align-items:center;margin-bottom:1rem">
+          <div id="period-btns" style="display:flex;gap:.375rem"></div>
+          <select id="branch-filter" class="select" style="width:auto;min-width:180px"><option value="">All Branches</option></select>
+          <select id="emp-filter" class="select" style="width:auto;min-width:160px"><option value="">All Employees</option></select>
+          <button id="btn-refresh" class="btn btn-primary btn-sm">Refresh</button>
+          <button id="btn-export-pdf" class="btn btn-secondary btn-sm">Export PDF Report</button>
+        </div>
+        <div id="kpi-cards" class="kpi-grid" style="margin-bottom:1.25rem"></div>
+        <div id="sync-status-card" class="card" style="padding:1rem;margin-bottom:1rem;font-size:.8125rem"></div>
+        <div class="dashboard-charts-grid">
+          <div class="card chart-card">
+            <h3 class="chart-card-title">Payment Methods</h3>
+            <div class="chart-wrap"><canvas id="chart-pay"></canvas></div>
+          </div>
+          <div class="card chart-card">
+            <h3 class="chart-card-title">By Employee</h3>
+            <div class="chart-wrap"><canvas id="chart-emp"></canvas></div>
+          </div>
+          <div class="card chart-card">
+            <h3 class="chart-card-title">Peak Sales Hours</h3>
+            <div class="chart-wrap"><canvas id="chart-hours"></canvas></div>
+          </div>
+          <div class="card chart-card">
+            <h3 class="chart-card-title">Top Selling Products</h3>
+            <div class="chart-wrap"><canvas id="chart-top-products"></canvas></div>
+          </div>
+        </div>
+        <div class="card" style="padding:1.25rem"><table class="data"><thead><tr><th>Employee</th><th>Invoices</th><th style="text-align:right">Revenue</th></tr></thead><tbody id="emp-table"></tbody></table></div>
+      </section>
+
+      <section id="panel-catalog" class="panel">
+        <h2 style="margin:0 0 1rem;font-weight:800">Menu Catalog</h2>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+          <div class="card" style="padding:1.25rem">
+            <h3 style="margin:0 0 .75rem;font-weight:700">Categories</h3>
+            <form id="cat-form" style="display:flex;gap:.5rem;margin-bottom:1rem">
+              <input id="cat-name" class="input" placeholder="Category name" required />
+              <button class="btn btn-primary btn-sm">Add</button>
+            </form>
+            <table class="data"><thead><tr><th>Name</th><th>Order</th><th></th></tr></thead><tbody id="cat-table"></tbody></table>
+          </div>
+          <div class="card" style="padding:1.25rem">
+            <h3 style="margin:0 0 .75rem;font-weight:700">Products</h3>
+            <form id="prod-form" class="form-grid">
+              <div class="input-group span-2"><label>Product Name</label><input name="name" class="input" required placeholder="e.g. Mango Tango" /></div>
+              <div class="input-group"><label>Category</label><select name="category_id" id="prod-cat" class="select" required></select></div>
+              <div class="input-group span-2">
+                <label class="prod-toggle-label"><input type="checkbox" id="prod-sizes-enabled" name="sizes_enabled" value="1" /> Enable Multi-Size Pricing</label>
+              </div>
+              <div id="prod-single-price-wrap" class="input-group"><label>Base Price USD</label><input name="unit_price" id="prod-unit-price" type="number" step="0.01" min="0.01" class="input" required /></div>
+              <div id="prod-multi-price-wrap" class="span-2 hidden" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.5rem">
+                <div class="input-group"><label>Small (S)</label><input name="price_s" id="prod-price-s" type="number" step="0.01" min="0.01" class="input" /></div>
+                <div class="input-group"><label>Medium (M)</label><input name="price_m" id="prod-price-m" type="number" step="0.01" min="0.01" class="input" /></div>
+                <div class="input-group"><label>Large (L)</label><input name="price_l" id="prod-price-l" type="number" step="0.01" min="0.01" class="input" /></div>
+              </div>
+              <div class="span-2"><button class="btn btn-primary">Add Product</button></div>
+            </form>
+            <table class="data" style="margin-top:1rem"><thead><tr><th>Product</th><th>Category</th><th style="text-align:right">Pricing</th><th></th></tr></thead><tbody id="prod-table"></tbody></table>
+          </div>
+        </div>
+      </section>
+
+      <section id="panel-recipes" class="panel">
+        <h2 style="margin:0 0 .25rem;font-weight:800">التركيبات والمكونات</h2>
+        <p style="margin:0 0 1rem;font-size:.875rem;color:var(--text-secondary)">Product Recipes (BOM) — define raw ingredients consumed per 1 unit sold.</p>
+        <div class="card" style="padding:1.25rem;margin-bottom:1rem">
+          <div class="input-group" style="max-width:420px">
+            <label for="recipe-product-filter">Select Product</label>
+            <select id="recipe-product-filter" class="select">
+              <option value="">— Choose a product —</option>
+            </select>
+          </div>
+        </div>
+        <div id="recipe-editor-wrap" class="hidden">
+          <datalist id="recipe-inv-list"></datalist>
+          <div style="display:grid;grid-template-columns:1fr;gap:1rem">
+            <div class="card" style="padding:1.25rem">
+              <h3 style="margin:0 0 .75rem;font-weight:700">Base Ingredients (per 1 unit sold)</h3>
+              <p style="margin:0 0 .625rem;font-size:.8125rem;color:var(--text-secondary)">Quantities normalize to each ingredient's locked unit (g, ml, or pcs). Use kg/L in the picker — saved as grams/ml.</p>
+              <div id="recipe-base-rows"></div>
+              <button type="button" id="recipe-add-base" class="btn btn-secondary btn-sm" style="margin-top:.5rem">+ Add Base Ingredient</button>
+            </div>
+          </div>
+          <div style="margin-top:1rem">
+            <button type="button" id="recipe-save" class="btn btn-primary">Save Base Recipe</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="panel-modifiers" class="panel">
+        <h2 style="margin:0 0 .25rem;font-weight:800">Ingredients / Modifiers</h2>
+        <p style="margin:0 0 1rem;font-size:.875rem;color:var(--text-secondary)">Global POS extras &amp; excludes — shared across all products. Configure name, extra charge, and stock qty deducted per sale.</p>
+        <div class="card" style="padding:1.25rem;margin-bottom:1rem">
+          <h3 style="margin:0 0 .75rem;font-weight:700">Add Modifier</h3>
+          <datalist id="mod-inv-list"></datalist>
+          <div style="display:grid;grid-template-columns:1.4fr 1.4fr .9fr .9fr .7fr auto;gap:.5rem;align-items:end">
+            <div class="input-group" style="margin:0"><label>Name (English)</label><input id="mod-new-name" class="input" placeholder="Extra Nutella" /></div>
+            <div class="input-group" style="margin:0"><label>Raw Material</label><input id="mod-new-inv" class="input" list="mod-inv-list" placeholder="Inventory item…" /></div>
+            <div class="input-group" style="margin:0"><label>Extra $</label><input id="mod-new-price" type="number" step="0.01" min="0" class="input" value="0" /></div>
+            <div class="input-group" style="margin:0"><label>Stock Qty</label><input id="mod-new-qty" type="number" step="0.001" min="0.001" class="input" placeholder="1" /></div>
+            <div class="input-group" style="margin:0"><label>Unit</label><select id="mod-new-unit" class="select"><option value="g">g</option><option value="kg">kg</option><option value="ml">ml</option><option value="L">L</option><option value="pcs">pcs</option></select></div>
+            <button type="button" id="mod-add-btn" class="btn btn-primary btn-sm">Add</button>
+          </div>
+        </div>
+        <div class="card" style="padding:1.25rem">
+          <table class="data"><thead><tr><th>Name</th><th>Material</th><th style="text-align:right">Extra $</th><th style="text-align:right">Stock Qty</th><th>Unit</th><th></th></tr></thead><tbody id="mod-table"></tbody></table>
+        </div>
+      </section>
+
+      <section id="panel-inventory" class="panel">
+        <div style="display:flex;flex-wrap:wrap;gap:.75rem;align-items:center;justify-content:space-between;margin-bottom:1rem">
+          <h2 style="margin:0;font-weight:800">Inventory</h2>
+          <button id="btn-export-inv-pdf" class="btn btn-secondary btn-sm">Export Inventory PDF</button>
+        </div>
+        <div class="inventory-forms-grid">
+          <div class="card" style="padding:1.25rem">
+            <h3 style="margin:0 0 .75rem;font-weight:700">Stock In — شو فوتت بضاعة</h3>
+            <p style="margin:0 0 .75rem;font-size:.8125rem;color:var(--text-secondary)">Search the global ingredient registry — selecting an existing item locks its name and unit. Weights are stored as grams (g), liquids as ml, counts as pcs. kg and L convert automatically.</p>
+            <form id="stock-in-unified-form" class="form-grid">
+              <div class="input-group span-2 inv-suggest-wrap">
+                <label>Inventory Item</label>
+                <input id="si-item" class="input" placeholder="Search ingredient name (e.g. قشطة)…" required autocomplete="off" />
+                <input type="hidden" id="si-item-id" value="" />
+                <div id="si-suggest" class="inv-suggest-dropdown hidden" role="listbox"></div>
+                <p id="si-item-lock" class="input-tip hidden"></p>
+              </div>
+              <div class="input-group"><label>Quantity</label><input id="si-qty" type="number" step="0.001" min="0.001" class="input" required /></div>
+              <div class="input-group"><label>Input Unit</label>
+                <select id="si-unit" class="select">
+                  <option value="g">Grams (g)</option>
+                  <option value="kg">Kilograms (kg → g)</option>
+                  <option value="ml">Milliliters (ml)</option>
+                  <option value="L">Liters (L → ml)</option>
+                  <option value="pcs">Pieces (pcs)</option>
+                </select>
+              </div>
+              <div class="input-group span-2"><label>Notes</label><input id="si-notes" class="input" placeholder="Delivery, spoilage return, purchase ref…" /></div>
+              <div class="inventory-purchase-fields span-2">
+                <h4 style="margin:0 0 .625rem;font-size:.8125rem;font-weight:700;color:var(--text-secondary)">Purchase details (optional — fill for supplier intake)</h4>
+                <div class="form-grid">
+                  <div class="input-group span-2 inv-suggest-wrap">
+                    <label>Supplier</label>
+                    <input id="si-supplier" class="input" placeholder="Search supplier for purchase intake…" autocomplete="off" />
+                    <input type="hidden" id="si-supplier-id" value="" />
+                    <div id="si-supplier-suggest" class="inv-suggest-dropdown hidden" role="listbox"></div>
+                  </div>
+                  <div class="input-group"><label>Unit Cost USD</label><input id="si-cost" type="number" step="0.0001" min="0" class="input" placeholder="0.00" /></div>
+                  <div class="input-group"><label>Intake Date</label><input id="si-intake-date" type="date" class="input" /></div>
+                  <div class="input-group"><label>Payment Status</label><select id="si-pay" class="select"><option value="unpaid">Unpaid</option><option value="partial">Partially Paid</option><option value="paid">Paid</option></select></div>
+                  <div class="input-group"><label>Amount Paid USD</label><input id="si-paid" type="number" step="0.01" min="0" class="input" value="0" /></div>
+                </div>
+              </div>
+              <div class="span-2"><button class="btn btn-primary">Record Incoming Stock</button></div>
+            </form>
+          </div>
+          <div class="card" style="padding:1.25rem">
+            <h3 style="margin:0 0 .75rem;font-weight:700">Stock Out — شو ظهرت بضاعة</h3>
+            <form id="stock-out-form" class="form-grid">
+              <div class="input-group span-2"><label>Item name</label><input id="so-item" class="input" list="inv-item-list" placeholder="Exact item name…" required autocomplete="off" /></div>
+              <div class="input-group"><label>Quantity</label><input id="so-qty" type="number" step="0.001" min="0.001" class="input" required /></div>
+              <div class="input-group"><label>Unit</label><input id="so-unit" class="input" readonly /></div>
+              <div class="input-group span-2"><label>Notes</label><input id="so-notes" class="input" placeholder="Waste, spoilage…" /></div>
+              <div class="span-2"><button class="btn btn-danger">Record Outgoing</button></div>
+            </form>
+          </div>
+        </div>
+        <datalist id="inv-item-list"></datalist>
+        <datalist id="supplier-list-inv"></datalist>
+        <div class="card inventory-stock-card" style="padding:1rem 1.25rem;margin-bottom:1rem">
+          <h3 style="margin:0 0 .625rem;font-weight:700">Current Stock Levels</h3>
+          <div class="inventory-table-scroll"><table class="data"><thead><tr><th>Name</th><th>Unit</th><th style="text-align:right">On Hand</th><th style="text-align:right">Reorder</th></tr></thead><tbody id="inv-stock-table"></tbody></table></div>
+        </div>
+        <div class="inventory-tables-grid">
+          <div class="card" style="padding:1rem 1.25rem">
+            <h3 style="margin:0 0 .625rem;font-weight:700">Recent Intakes</h3>
+            <div class="inventory-table-scroll"><table class="data"><thead><tr><th>Date</th><th>Supplier</th><th>Item</th><th>Qty</th><th>Total</th><th>Status</th></tr></thead><tbody id="intake-table"></tbody></table></div>
+          </div>
+          <div class="card" style="padding:1rem 1.25rem">
+            <h3 style="margin:0 0 .625rem;font-weight:700">Stock Out History</h3>
+            <div class="inventory-table-scroll"><table class="data"><thead><tr><th>Time</th><th>Item</th><th>Qty</th><th>Balance</th><th>Notes</th></tr></thead><tbody id="ledger-table"></tbody></table></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="panel-customers" class="panel">
+        <div style="display:flex;flex-wrap:wrap;gap:.75rem;align-items:center;justify-content:space-between;margin-bottom:1rem">
+          <h2 style="margin:0;font-weight:800">Customer Debts</h2>
+          <button id="btn-export-customer-pdf" class="btn btn-secondary btn-sm">Export Customer Debts PDF</button>
+        </div>
+        <div id="customer-outstanding-summary" class="card debt-summary-card"></div>
+        <div class="card" style="padding:1.25rem;margin-bottom:1rem">
+          <div class="input-group" style="margin:0 0 .75rem">
+            <label for="customer-invoice-search">Search Invoice</label>
+            <input id="customer-invoice-search" class="input" placeholder="Invoice ID or Reference #…" autocomplete="off" />
+          </div>
+          <div class="input-group inv-suggest-wrap" style="max-width:420px;margin:0">
+            <label for="customer-filter-search">Find Customer</label>
+            <input id="customer-filter-search" class="input" placeholder="Live search — prevents duplicate names…" autocomplete="off" />
+            <div id="customer-filter-suggest" class="inv-suggest-dropdown hidden" role="listbox"></div>
+          </div>
+          <div class="input-group" style="max-width:420px;margin:.5rem 0 0">
+            <label for="customer-filter">Selected Customer</label>
+            <select id="customer-filter" class="select">
+              <option value="">— Choose a customer —</option>
+            </select>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem">
+          <div class="card" style="padding:1.25rem">
+            <h3 style="margin:0 0 .75rem;font-weight:700">Add Customer</h3>
+            <form id="customer-form">
+              <div class="input-group"><label>Name</label><input name="name" class="input" required /></div>
+              <div class="input-group"><label>Phone</label><input name="contact_phone" class="input" /></div>
+              <button class="btn btn-primary">Add Customer</button>
+            </form>
+          </div>
+          <div class="card" style="padding:1.25rem">
+            <h3 style="margin:0 0 .75rem;font-weight:700">Record Invoice / Bill</h3>
+            <form id="customer-debt-form">
+              <div class="input-group inv-suggest-wrap"><label>Customer</label><input id="debt-customer-input" class="input" placeholder="Search or type customer…" required autocomplete="off" /><div id="debt-customer-suggest" class="inv-suggest-dropdown hidden" role="listbox"></div></div>
+              <div class="input-group"><label>Description</label><input name="description" class="input" required /></div>
+              <div class="input-group"><label>Amount USD</label><input name="amount_usd" type="number" step="0.01" min="0.01" class="input" required /></div>
+              <div class="input-group"><label>Reference Invoice Number <span style="opacity:.6;font-weight:400">(رقم الفاتورة المرجعي — optional)</span></label><input name="reference_number" class="input" maxlength="64" placeholder="External bill #…" /></div>
+              <button class="btn btn-primary">Record Bill</button>
+            </form>
+          </div>
+        </div>
+        <datalist id="customer-list"></datalist>
+        <div id="customer-bills-wrap" class="hidden">
+          <div class="card" style="padding:1.25rem;margin-bottom:1rem">
+            <div id="customer-summary"></div>
+          </div>
+          <div class="card" style="padding:1.25rem">
+            <h3 style="margin:0 0 .75rem;font-weight:700">Invoices &amp; Bills</h3>
+            <table class="data"><thead><tr><th>Invoice ID</th><th>Ref #</th><th>Date</th><th>Description</th><th style="text-align:right">Amount</th><th>Status</th><th>Actions</th></tr></thead><tbody id="customer-debt-table"></tbody></table>
+          </div>
+        </div>
+      </section>
+
+      <section id="panel-suppliers" class="panel">
+        <div style="display:flex;flex-wrap:wrap;gap:.75rem;align-items:center;justify-content:space-between;margin-bottom:1rem">
+          <h2 style="margin:0;font-weight:800">Supplier Debts</h2>
+          <button id="btn-export-supplier-pdf" class="btn btn-secondary btn-sm">Export Supplier Debts PDF</button>
+        </div>
+        <div id="supplier-outstanding-summary" class="card debt-summary-card"></div>
+        <div class="card" style="padding:1.25rem;margin-bottom:1rem">
+          <div class="input-group" style="margin:0 0 .75rem">
+            <label for="supplier-invoice-search">Search Invoice</label>
+            <input id="supplier-invoice-search" class="input" placeholder="Invoice ID or Reference #…" autocomplete="off" />
+          </div>
+          <div class="input-group inv-suggest-wrap" style="max-width:420px;margin:0">
+            <label for="supplier-filter-search">Find Supplier</label>
+            <input id="supplier-filter-search" class="input" placeholder="Live search — prevents duplicate names…" autocomplete="off" />
+            <div id="supplier-filter-suggest" class="inv-suggest-dropdown hidden" role="listbox"></div>
+          </div>
+          <div class="input-group" style="max-width:420px;margin:.5rem 0 0">
+            <label for="supplier-filter">Selected Supplier</label>
+            <select id="supplier-filter" class="select">
+              <option value="">— Choose a supplier —</option>
+            </select>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem">
+          <div class="card" style="padding:1.25rem">
+            <h3 style="margin:0 0 .75rem;font-weight:700">Add Supplier</h3>
+            <form id="supplier-form">
+              <div class="input-group"><label>Name</label><input name="name" class="input" required /></div>
+              <div class="input-group"><label>Category</label><input name="category" class="input" required /></div>
+              <div class="input-group"><label>Phone</label><input name="contact_phone" class="input" /></div>
+              <button class="btn btn-primary">Add Supplier</button>
+            </form>
+          </div>
+          <div class="card" style="padding:1.25rem">
+            <h3 style="margin:0 0 .75rem;font-weight:700">Record Invoice / Bill</h3>
+            <form id="supplier-debt-form">
+              <div class="input-group inv-suggest-wrap"><label>Supplier</label><input id="debt-supplier-input" class="input" placeholder="Search or type supplier…" required autocomplete="off" /><div id="debt-supplier-suggest" class="inv-suggest-dropdown hidden" role="listbox"></div></div>
+              <div class="input-group"><label>Supplier Category</label><input id="debt-supplier-cat" class="input" placeholder="Auto or custom category" /></div>
+              <div class="input-group"><label>Description</label><input name="description" class="input" required /></div>
+              <div class="input-group"><label>Amount USD</label><input name="amount_usd" type="number" step="0.01" min="0.01" class="input" required /></div>
+              <div class="input-group"><label>Reference Invoice Number <span style="opacity:.6;font-weight:400">(رقم الفاتورة المرجعي — optional)</span></label><input name="reference_number" class="input" maxlength="64" placeholder="External bill #…" /></div>
+              <button class="btn btn-primary">Record Bill</button>
+            </form>
+          </div>
+        </div>
+        <datalist id="supplier-list"></datalist>
+        <div id="supplier-bills-wrap" class="hidden">
+          <div class="card" style="padding:1.25rem;margin-bottom:1rem">
+            <div id="supplier-summary"></div>
+          </div>
+          <div class="card" style="padding:1.25rem">
+            <h3 style="margin:0 0 .75rem;font-weight:700">Invoices &amp; Bills</h3>
+            <table class="data"><thead><tr><th>Invoice ID</th><th>Ref #</th><th>Date</th><th>Description</th><th style="text-align:right">Amount</th><th>Status</th><th>Actions</th></tr></thead><tbody id="supplier-debt-table"></tbody></table>
+          </div>
+        </div>
+      </section>
+
+      <section id="panel-expenses" class="panel">
+        <h2 style="margin:0 0 1rem;font-weight:800">Expenses</h2>
+        <div style="display:flex;justify-content:flex-end;margin-bottom:.75rem">
+          <button id="btn-export-exp-pdf" class="btn btn-secondary btn-sm">Export Expenses PDF</button>
+        </div>
+        <div class="card" style="padding:1.25rem;margin-bottom:1rem">
+          <form id="expense-form" class="form-grid">
+            <div class="input-group span-2"><label>Description</label><input name="description" class="input" required /></div>
+            <div class="input-group"><label>Category</label><select name="category" class="select"><option value="supplies">Supplies</option><option value="utilities">Utilities</option><option value="rent">Rent</option><option value="salaries">Salaries</option><option value="maintenance">Maintenance</option><option value="marketing">Marketing</option><option value="other">Other</option></select></div>
+            <div class="input-group"><label>Amount USD</label><input name="amount_usd" type="number" step="0.01" min="0.01" class="input" required /><p class="input-tip" id="exp-lbp-preview"></p></div>
+            <div class="input-group"><label>Date</label><input name="expense_date" type="date" class="input" required /></div>
+            <div class="input-group span-2"><label>Notes</label><input name="notes" class="input" /></div>
+            <div class="span-2"><button class="btn btn-primary">Save Expense</button></div>
+          </form>
+        </div>
+        <div class="card" style="padding:1.25rem"><table class="data"><thead><tr><th>Date</th><th>Description</th><th>Category</th><th style="text-align:right">Amount</th></tr></thead><tbody id="expense-table"></tbody></table></div>
+      </section>
+
+      <section id="panel-transactions" class="panel">
+        <h2 style="margin:0 0 .25rem;font-weight:800">Transactions</h2>
+        <p style="margin:0 0 1rem;font-size:.875rem;color:var(--text-secondary)">حركة المبيعات — every finalized POS sale</p>
+        <div class="card" style="padding:1rem 1.25rem;margin-bottom:1rem">
+          <div class="txn-filter-bar">
+            <div class="input-group txn-filter-search">
+              <label for="txn-search">Search by System ID</label>
+              <input id="txn-search" class="input" type="search" placeholder="e.g. 1001" autocomplete="off" />
+            </div>
+            <div class="input-group">
+              <label for="txn-date-mode">خيار التاريخ / Date</label>
+              <select id="txn-date-mode" class="select">
+                <option value="all">All dates</option>
+                <option value="day">Specific day</option>
+                <option value="range">Custom range</option>
+              </select>
+            </div>
+            <div class="input-group txn-date-day hidden" id="txn-day-wrap">
+              <label for="txn-date-day">Day</label>
+              <input id="txn-date-day" type="date" class="input" />
+            </div>
+            <div class="input-group txn-date-range hidden" id="txn-from-wrap">
+              <label for="txn-date-from">From</label>
+              <input id="txn-date-from" type="date" class="input" />
+            </div>
+            <div class="input-group txn-date-range hidden" id="txn-to-wrap">
+              <label for="txn-date-to">To</label>
+              <input id="txn-date-to" type="date" class="input" />
+            </div>
+            <div class="txn-filter-actions">
+              <button type="button" id="txn-apply" class="btn btn-primary btn-sm">Apply</button>
+              <button type="button" id="txn-clear" class="btn btn-secondary btn-sm">Clear</button>
+            </div>
+          </div>
+        </div>
+        <div class="card" style="padding:1.25rem">
+          <table class="data txn-table">
+            <thead>
+              <tr>
+                <th>System ID</th>
+                <th>Date &amp; Time</th>
+                <th>Items Summary</th>
+                <th>Discount</th>
+                <th style="text-align:right">Total</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="txn-table"></tbody>
+          </table>
+          <p id="txn-empty" class="hidden" style="text-align:center;color:var(--text-secondary);margin:1rem 0 0;font-size:.875rem">No transactions match your filters.</p>
+        </div>
+      </section>
+
+      <section id="panel-users" class="panel">
+        <h2 style="margin:0 0 1rem;font-weight:800">User Management</h2>
+        <div class="card" style="padding:1.25rem;margin-bottom:1rem">
+          <h3 style="margin:0 0 .75rem;font-weight:700">Create Account</h3>
+          <form id="create-user-form" class="form-grid">
+            <div class="input-group"><label>Username</label><input name="username" class="input" required /></div>
+            <div class="input-group"><label>Full Name</label><input name="full_name" class="input" required /></div>
+            <div class="input-group"><label>Password</label><input name="password" type="password" class="input" required minlength="8" /></div>
+            <div class="input-group"><label>Role</label><select name="role" id="create-role" class="select"><option value="cashier">Cashier</option><option value="manager">Manager</option><option value="admin">Admin</option></select></div>
+            <div class="span-2"><label style="font-size:.8125rem;font-weight:700">Custom Permissions</label><div id="create-perms" class="perm-grid"></div></div>
+            <div class="span-2"><button class="btn btn-primary">Create User</button></div>
+          </form>
+        </div>
+        <div class="card" style="padding:1.25rem"><table class="data"><thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Status</th><th></th></tr></thead><tbody id="users-table"></tbody></table></div>
+      </section>
+
+      <section id="panel-settings" class="panel">
+        <h2 style="margin:0 0 1rem;font-weight:800">Settings</h2>
+
+        <div class="card settings-sync-card" style="padding:1.5rem;margin-bottom:1.25rem;border:1px solid var(--border)">
+          <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:1rem">
+            <div style="flex:1;min-width:220px">
+              <h3 style="margin:0 0 .5rem;font-weight:800;font-size:1.05rem">Sync Time</h3>
+              <p style="margin:0;font-size:.8125rem;color:var(--text-secondary);line-height:1.5">Align all database timestamps with this computer&apos;s clock instantly. Use after restoring backups or when sales reports show the wrong day.</p>
+              <p id="time-sync-status" style="margin:.75rem 0 0;font-size:.75rem;color:var(--text-muted)"></p>
+            </div>
+            <button type="button" id="btn-sync-time" class="btn btn-primary" style="min-width:160px;padding:.85rem 1.5rem;font-weight:800;font-size:1rem">Sync Time</button>
+          </div>
+        </div>
+
+        <div class="card" style="padding:1.25rem">
+          <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:1rem">
+            <div>
+              <h3 style="margin:0;font-weight:800">Branch Management</h3>
+              <p style="margin:.35rem 0 0;font-size:.8125rem;color:var(--text-secondary)">Add and edit store locations</p>
+            </div>
+            <button type="button" id="btn-add-branch" class="btn btn-primary btn-sm">Add Branch</button>
+          </div>
+          <table class="data">
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Name</th>
+                <th>Location</th>
+                <th>Phone</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="branches-table"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<div id="branch-edit-modal" class="overlay hidden">
+  <div class="modal" style="max-width:480px">
+    <h3 id="branch-modal-title" style="font-weight:800;margin:0 0 1rem">Add Branch</h3>
+    <form id="branch-edit-form">
+      <input type="hidden" id="branch-edit-id" />
+      <div class="input-group"><label>Branch Code</label><input id="branch-edit-code" class="input" placeholder="Auto-generated if empty" /></div>
+      <div class="input-group"><label>Branch Name</label><input id="branch-edit-name" class="input" required /></div>
+      <div class="input-group"><label>Location</label><input id="branch-edit-location" class="input" placeholder="City, Lebanon" /></div>
+      <div class="input-group"><label>Address</label><input id="branch-edit-address" class="input" /></div>
+      <div class="input-group"><label>Phone</label><input id="branch-edit-phone" class="input" /></div>
+      <div id="branch-edit-active-wrap" class="input-group hidden">
+        <label>Status</label>
+        <select id="branch-edit-active" class="select"><option value="true">Active</option><option value="false">Inactive</option></select>
+      </div>
+      <div style="display:flex;gap:.75rem;margin-top:1rem">
+        <button type="button" id="branch-edit-cancel" class="btn btn-secondary" style="flex:1">Cancel</button>
+        <button type="submit" class="btn btn-primary" style="flex:1">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="edit-modal" class="overlay hidden">
+  <div class="modal" style="max-width:520px">
+    <h3 style="font-weight:800;margin:0 0 1rem">Edit User</h3>
+    <form id="edit-form">
+      <input type="hidden" id="edit-id" />
+      <div class="input-group"><label>Name</label><input id="edit-name" class="input" required /></div>
+      <div class="input-group"><label>Role</label><select id="edit-role" class="select"><option value="cashier">Cashier</option><option value="manager">Manager</option><option value="admin">Admin</option></select></div>
+      <div class="input-group"><label>Status</label><select id="edit-active" class="select"><option value="true">Active</option><option value="false">Inactive</option></select></div>
+      <div class="input-group"><label>Reset Password</label><input id="edit-pw" type="password" class="input" placeholder="Leave blank to keep" autocomplete="new-password" /></div>
+      <label style="font-size:.8125rem;font-weight:700">Permissions</label>
+      <div id="edit-perms" class="perm-grid"></div>
+      <div style="display:flex;gap:.75rem;margin-top:1rem"><button type="button" id="edit-cancel" class="btn btn-secondary" style="flex:1">Cancel</button><button type="submit" class="btn btn-primary" style="flex:1">Save</button></div>
+    </form>
+  </div>
+</div>
+
+<div id="cat-edit-modal" class="overlay hidden">
+  <div class="modal" style="max-width:420px">
+    <h3 style="font-weight:800;margin:0 0 1rem">Edit Category</h3>
+    <form id="cat-edit-form">
+      <input type="hidden" id="cat-edit-id" />
+      <div class="input-group"><label>Name</label><input id="cat-edit-name" class="input" required /></div>
+      <div class="input-group"><label>Sort Order</label><input id="cat-edit-order" type="number" class="input" value="0" /></div>
+      <div style="display:flex;gap:.75rem;margin-top:1rem"><button type="button" id="cat-edit-cancel" class="btn btn-secondary" style="flex:1">Cancel</button><button type="submit" class="btn btn-primary" style="flex:1">Save</button></div>
+    </form>
+  </div>
+</div>
+
+<div id="prod-edit-modal" class="overlay hidden">
+  <div class="modal" style="max-width:420px">
+    <h3 style="font-weight:800;margin:0 0 1rem">Edit Product</h3>
+    <form id="prod-edit-form">
+      <input type="hidden" id="prod-edit-id" />
+      <div class="input-group"><label>Product Name</label><input id="prod-edit-name" class="input" required /></div>
+      <div class="input-group"><label>Category</label><select id="prod-edit-cat" class="select" required></select></div>
+      <div class="input-group span-2">
+        <label class="prod-toggle-label"><input type="checkbox" id="prod-edit-sizes-enabled" /> Enable Multi-Size Pricing</label>
+      </div>
+      <div id="prod-edit-single-wrap" class="input-group"><label>Base Price USD</label><input id="prod-edit-price" type="number" step="0.01" min="0.01" class="input" required /></div>
+      <div id="prod-edit-multi-wrap" class="hidden" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.5rem">
+        <div class="input-group"><label>Small (S)</label><input id="prod-edit-price-s" type="number" step="0.01" min="0.01" class="input" /></div>
+        <div class="input-group"><label>Medium (M)</label><input id="prod-edit-price-m" type="number" step="0.01" min="0.01" class="input" /></div>
+        <div class="input-group"><label>Large (L)</label><input id="prod-edit-price-l" type="number" step="0.01" min="0.01" class="input" /></div>
+      </div>
+      <div style="display:flex;gap:.75rem;margin-top:1rem"><button type="button" id="prod-edit-cancel" class="btn btn-secondary" style="flex:1">Cancel</button><button type="submit" class="btn btn-primary" style="flex:1">Save</button></div>
+    </form>
+  </div>
+</div>
+
+<div id="entity-edit-modal" class="overlay hidden">
+  <div class="modal" style="max-width:480px">
+    <h3 id="entity-edit-title" style="font-weight:800;margin:0 0 1rem">Edit Profile</h3>
+    <form id="entity-edit-form">
+      <input type="hidden" id="entity-edit-type" />
+      <input type="hidden" id="entity-edit-id" />
+      <div class="input-group"><label>Name</label><input id="entity-edit-name" class="input" required /></div>
+      <div id="entity-edit-category-wrap" class="input-group hidden"><label>Category</label><input id="entity-edit-category" class="input" /></div>
+      <div class="input-group"><label>Phone</label><input id="entity-edit-phone" class="input" /></div>
+      <div style="display:flex;gap:.75rem;margin-top:1rem"><button type="button" id="entity-edit-cancel" class="btn btn-secondary" style="flex:1">Cancel</button><button type="submit" class="btn btn-primary" style="flex:1">Save</button></div>
+    </form>
+  </div>
+</div>
+
+<div id="bill-edit-modal" class="overlay hidden">
+  <div class="modal" style="max-width:480px">
+    <h3 style="font-weight:800;margin:0 0 1rem">Edit Invoice / Bill</h3>
+    <form id="bill-edit-form">
+      <input type="hidden" id="bill-edit-type" />
+      <input type="hidden" id="bill-edit-id" />
+      <div class="input-group"><label>Description</label><input id="bill-edit-desc" class="input" required /></div>
+      <div class="input-group"><label>Reference Invoice Number</label><input id="bill-edit-ref" class="input" maxlength="64" placeholder="External bill # (optional)" /></div>
+      <div class="input-group"><label>Amount USD</label><input id="bill-edit-amount" type="number" step="0.01" min="0.01" class="input" required /></div>
+      <div class="input-group"><label>Due Date</label><input id="bill-edit-due" type="date" class="input" /></div>
+      <div style="display:flex;gap:.75rem;margin-top:1rem"><button type="button" id="bill-edit-cancel" class="btn btn-secondary" style="flex:1">Cancel</button><button type="submit" class="btn btn-primary" style="flex:1">Save</button></div>
+    </form>
+  </div>
+</div>
+
+<div id="txn-receipt-modal" class="overlay hidden">
+  <div class="modal" style="max-width:520px">
+    <h3 style="font-weight:800;margin:0 0 1rem">Receipt #<span id="txn-modal-num"></span></h3>
+    <div id="txn-modal-body" style="font-size:.875rem;line-height:1.5;margin-bottom:1rem"></div>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+      <button type="button" id="txn-modal-reprint" class="btn btn-primary" style="flex:1">Reprint Thermal</button>
+      <button type="button" id="txn-modal-pdf" class="btn btn-secondary" style="flex:1">Download PDF</button>
+      <button type="button" id="txn-modal-wa" class="btn btn-secondary" style="flex:1">WhatsApp</button>
+    </div>
+    <button type="button" id="txn-modal-close" class="btn btn-ghost" style="width:100%;margin-top:.75rem">Close</button>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script>
+(function(){document.documentElement.setAttribute('data-theme',localStorage.getItem('bob_theme')||'dark');})();
+const Auth=BobAuth.create('admin');
+const PERM_KEYS=['pos','close_shift','sales_reports','inventory','catalog','expenses','suppliers','shift_audits','global_settings','user_management','admin_dashboard'];
+const PERM_LABELS={pos:'POS Access',close_shift:'Close Shift',sales_reports:'Sales Reports',inventory:'Inventory',catalog:'Catalog CRUD',expenses:'Expenses',suppliers:'Suppliers',shift_audits:'Shift Audits',global_settings:'Settings',user_management:'User Management',admin_dashboard:'Admin Dashboard'};
+const S={token:localStorage.getItem('bob_admin_token'),user:JSON.parse(localStorage.getItem('bob_admin_user')||'null'),tab:'reports',period:'daily',opId:null,branchId:null,branches:[],charts:{},users:[],suppliers:[],customers:[],invItems:[],cats:[],prods:[],rate:89500,perms:{}};
+const _reportsGuard=BobUI.staleGuard();
+const TABS=[{id:'reports',label:'Sales Reports',perm:'sales_reports'},{id:'catalog',label:'Catalog',perm:'catalog'},{id:'recipes',label:'Product Recipes (BOM)',perm:'catalog'},{id:'modifiers',label:'Ingredients/Modifiers',perm:'catalog'},{id:'inventory',label:'Inventory',perm:'inventory'},{id:'customers',label:'Customer Debts',perm:'suppliers'},{id:'suppliers',label:'Supplier Debts',perm:'suppliers'},{id:'expenses',label:'Expenses',perm:'expenses'},{id:'transactions',label:'Transactions',perm:'sales_reports'},{id:'users',label:'User Management',perm:'user_management'},{id:'settings',label:'Settings',perm:'global_settings'}];
+const API={
+  req:(p,o)=>Auth.req(p,o),
+  login(u,p){const b=new FormData();b.append('username',u);b.append('password',p);return API.req('/api/auth/login',{method:'POST',body:b,headers:{'X-Bob-Portal':'admin'}});},
+  me:()=>API.req('/api/auth/me'),perms:()=>API.req('/api/users/permissions'),
+  settings:()=>API.req('/api/finance/settings'),setSettings:d=>API.req('/api/finance/settings',{method:'PATCH',body:JSON.stringify(d)}),
+  backupData:()=>downloadDbBackup('/api/system/data/backup'),
+  clearData:d=>API.req('/api/system/data/clear',{method:'POST',body:JSON.stringify(d)}),
+  dashboard:(p,op,bid)=>{const q=new URLSearchParams({period:p});if(op)q.set('operator_id',op);if(bid)q.set('branch_id',bid);return API.req(`/api/reports/dashboard?${q}`);},
+  branches:()=>API.req('/api/branches'),
+  branchesAll:()=>API.req('/api/branches?active_only=false'),
+  createBranch:d=>API.req('/api/branches',{method:'POST',body:JSON.stringify(d)}),
+  updateBranch:(id,d)=>API.req(`/api/branches/${id}`,{method:'PATCH',body:JSON.stringify(d)}),
+  timeStatus:()=>API.req('/api/system/time-status'),
+  syncTime:()=>API.req('/api/system/sync-time',{method:'POST',body:JSON.stringify({client_time:new Date().toISOString()})}),
+  expenses:(bid)=>{const q=bid?`?branch_id=${encodeURIComponent(bid)}`:'';return API.req(`/api/finance/expenses${q}`);},addExpense:d=>API.req('/api/finance/expenses',{method:'POST',body:JSON.stringify(d)}),
+  suppliers:()=>API.req('/api/finance/suppliers'),addSupplier:d=>API.req('/api/finance/suppliers',{method:'POST',body:JSON.stringify(d)}),
+  supplierSuggest:q=>API.req(`/api/finance/suppliers/suggest?q=${encodeURIComponent(q||'')}&limit=12`),
+  patchSupplier:(id,d)=>API.req(`/api/finance/suppliers/${id}`,{method:'PATCH',body:JSON.stringify(d)}),
+  addDebt:d=>API.req('/api/finance/debts',{method:'POST',body:JSON.stringify(d)}),
+  patchDebt:(id,d)=>API.req(`/api/finance/debts/${id}`,{method:'PATCH',body:JSON.stringify(d)}),
+  customers:()=>API.req('/api/finance/customers'),addCustomer:d=>API.req('/api/finance/customers',{method:'POST',body:JSON.stringify(d)}),
+  customerSuggest:q=>API.req(`/api/finance/customers/suggest?q=${encodeURIComponent(q||'')}&limit=12`),
+  patchCustomer:(id,d)=>API.req(`/api/finance/customers/${id}`,{method:'PATCH',body:JSON.stringify(d)}),
+  customerDebts:()=>API.req('/api/finance/customer-debts'),addCustomerDebt:d=>API.req('/api/finance/customer-debts',{method:'POST',body:JSON.stringify(d)}),
+  patchCustomerDebt:(id,d)=>API.req(`/api/finance/customer-debts/${id}`,{method:'PATCH',body:JSON.stringify(d)}),
+  customerDebtsById:(id,q)=>API.req(`/api/finance/customers/${id}/debts${q?`?q=${encodeURIComponent(q)}`:''}`),
+  customerDebtsSearch:q=>API.req(`/api/finance/customer-debts?q=${encodeURIComponent(q)}`),
+  supplierDebtsById:(id,q)=>API.req(`/api/finance/suppliers/${id}/debts${q?`?q=${encodeURIComponent(q)}`:''}`),
+  supplierDebtsSearch:q=>API.req(`/api/finance/debts?q=${encodeURIComponent(q)}`),
+  intakes:(bid)=>{const q=bid?`?branch_id=${encodeURIComponent(bid)}`:'';return API.req(`/api/finance/intakes${q}`);},addIntake:d=>API.req('/api/finance/intakes',{method:'POST',body:JSON.stringify(d)}),
+  invItems:(bid)=>{const q=bid?`?branch_id=${encodeURIComponent(bid)}`:'';return API.req(`/api/inventory/items${q}`);},
+  invSuggest:q=>API.req(`/api/inventory/items/suggest?q=${encodeURIComponent(q||'')}&limit=12`),
+  stockIn:d=>API.req('/api/inventory/stock-in',{method:'POST',body:JSON.stringify(d)}),
+  recipesForProduct:id=>API.req(`/api/inventory/recipes/product/${id}`),
+  saveProductRecipes:(id,payload)=>API.req(`/api/inventory/recipes/product/${id}`,{method:'PUT',body:JSON.stringify(payload)}),
+  globalModifiers:()=>API.req('/api/inventory/global-modifiers'),
+  addGlobalModifier:d=>API.req('/api/inventory/global-modifiers',{method:'POST',body:JSON.stringify(d)}),
+  updateGlobalModifier:(id,d)=>API.req(`/api/inventory/global-modifiers/${id}`,{method:'PUT',body:JSON.stringify(d)}),
+  deleteGlobalModifier:id=>API.req(`/api/inventory/global-modifiers/${id}`,{method:'DELETE'}),
+  stockOut:d=>API.req('/api/inventory/stock-out',{method:'POST',body:JSON.stringify(d)}),ledger:()=>API.req('/api/inventory/ledger'),
+  listUsers:()=>API.req('/api/users/admin/list'),createUser:d=>API.req('/api/users/admin/create',{method:'POST',body:JSON.stringify(d)}),
+  updateUser:(id,d)=>API.req(`/api/users/admin/${id}`,{method:'PATCH',body:JSON.stringify(d)}),
+  updateName:n=>API.req('/api/users/profile/full-name',{method:'PATCH',body:JSON.stringify({full_name:n})}),
+  categories:()=>API.req('/api/catalog/categories'),addCat:d=>API.req('/api/catalog/categories',{method:'POST',body:JSON.stringify(d)}),
+  patchCat:(id,d)=>API.req(`/api/catalog/categories/${id}`,{method:'PATCH',body:JSON.stringify(d)}),
+  products:()=>API.req('/api/catalog/products'),addProd:d=>API.req('/api/catalog/products',{method:'POST',body:JSON.stringify(d)}),
+  patchProd:(id,d)=>API.req(`/api/catalog/products/${id}`,{method:'PATCH',body:JSON.stringify(d)}),
+  syncStatus:()=>API.req('/api/sync/status'),
+  transactions:(q)=>{const p=new URLSearchParams();if(q?.sale)p.set('q',q.sale);if(q?.date_from)p.set('date_from',q.date_from);if(q?.date_to)p.set('date_to',q.date_to);const qs=p.toString();return API.req(`/api/sales/transactions${qs?`?${qs}`:''}`);},
+  printThermal:id=>API.req(`/api/sales/orders/${id}/print-thermal`,{method:'POST'}),
+};
+const $=id=>document.getElementById(id);
+const fmt=n=>Number(n).toFixed(2);
+const fmtLbp=n=>Math.round(Number(n)).toLocaleString();
+const dualCell=(usd,lbp)=>`<td class="dual-cell"><span class="usd">$${fmt(usd)}</span><span class="lbp">${fmtLbp(lbp||usd*S.rate)} LBP</span></td>`;
+function toast(m){$('toast').textContent=m;$('toast').classList.remove('hidden');setTimeout(()=>$('toast').classList.add('hidden'),3000);}
+async function downloadPdf(url,filename){
+  const res=await fetch(url,{credentials:'include',headers:{Authorization:`Bearer ${S.token}`,'X-Bob-Portal':'admin'}});
+  if(!res.ok){const err=await res.json().catch(()=>({detail:'Export failed'}));throw new Error(typeof err.detail==='string'?err.detail:'Export failed');}
+  const blob=await res.blob();const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=filename;a.click();
+}
+async function downloadDbBackup(url){
+  const res=await fetch(url,{credentials:'include',headers:{Authorization:`Bearer ${S.token}`,'X-Bob-Portal':'admin'}});
+  if(!res.ok){const err=await res.json().catch(()=>({detail:'Backup failed'}));throw new Error(typeof err.detail==='string'?err.detail:'Backup failed');}
+  const cd=res.headers.get('Content-Disposition')||'';
+  const match=cd.match(/filename=\"?([^\";]+)\"?/i);
+  const filename=match?match[1]:`bob_juice_backup_${new Date().toISOString().slice(0,10).replace(/-/g,'_')}.db`;
+  const blob=await res.blob();const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=filename;a.click();
+}
+function waDigits(phone){return phone?String(phone).replace(/\D/g,''):'';}
+function waUrl(phone,text){return `https://wa.me/${waDigits(phone)||''}?text=${encodeURIComponent(text)}`;}
+function billInvoiceLabel(debt){const ref=(debt.reference_number||'').trim();return ref||String(debt.invoice_number||debt.display_number||debt.id);}
+function billAmountLabel(debt){return `$${fmt(debt.amount_usd)} USD`;}
+function customerWaText(name,debt){
+  const inv=billInvoiceLabel(debt);
+  const amt=billAmountLabel(debt);
+  return `أهلاً بك أستاذ ${name}، أتمنى أن تكون بأفضل حال.\nتحية طيبة من BOB JUICE ✨\nيرجى العلم بأن الرصيد المتبقي لحسابكم لدينا والمُسجّل تحت الفاتورة رقم #${inv} هو:\n🧾 ${amt}\nشاكرين لك جزيل ثقتك وتعاملك الراقي معنا. دمتم بخير وعافية.`;
+}
+function supplierRegisterWaText(supplierName,debt){
+  const inv=billInvoiceLabel(debt);
+  return `تحية طيبة أستاذ ${supplierName}، معكم إدارة BOB JUICE.\nيرجى العلم أنه تم تسجيل الفاتورة الجديدة بنجاح وإضافتها لحسابكم على النظام تحت رقم #${inv}:\n📦 البيان: ${debt.description}\n💰 القيمة المسجلة لحسابكم: ${billAmountLabel(debt)}\nأرسلنا لكم التفاصيل لتوثيق المطابقات المالية بيننا. شاكرين جهودكم المتميزة وتعاونكم الدائم معنا، مع خالص الاحترام والتقدير. 🙏`;
+}
+function supplierPaymentWaText(supplierName,debt){
+  const inv=billInvoiceLabel(debt);
+  return `تحية طيبة أستاذ ${supplierName}، معكم إدارة BOB JUICE.\nيرجى العلم أنه تم تسجيل دفعة مالية جديدة لحسابكم بنجاح تحت الفاتورة رقم #${inv}:\n💰 المبلغ المدفوع: ${billAmountLabel(debt)}\nتم تحديث الحسابات لدينا وإرسال التفاصيل لتوثيق المطابقة المالية بيننا. شاكرين تعاونكم الدائم معنا، مع خالص الاحترام والتقدير. 🙏`;
+}
+function supplierWaText(supplierName,debt,paid){return paid?supplierPaymentWaText(supplierName,debt):supplierRegisterWaText(supplierName,debt);}
+function openWhatsApp(phone,text){const url=waUrl(phone,text);window.open(url,'_blank','noopener');}
+function billInvoiceCells(debt){
+  const ref=(debt.reference_number||'').trim();
+  return `<td><strong>#${debt.invoice_number}</strong></td><td>${ref?escHtml(ref):'—'}</td>`;
+}
+function escHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function billPaid(debt){return !!(debt.is_paid||debt.is_settled||debt.payment_status==='Paid');}
+function statusToggleBtn(debt,type){
+  const paid=billPaid(debt);
+  const cls=paid?'badge badge-success':'badge badge-accent';
+  const label=paid?'Paid':'Unpaid';
+  return `<button type="button" class="btn-status-toggle ${cls}" data-id="${debt.id}" data-type="${type}" data-paid="${paid?'1':'0'}" title="Click to toggle">${label}</button>`;
+}
+function outstandingSummaryHtml(usd,lbp,label){
+  return `<div class="debt-summary-label">${label}</div><div class="debt-summary-usd">$${fmt(usd)}</div><div class="debt-summary-lbp">${fmtLbp(lbp)} LBP</div>`;
+}
+function sumOutstanding(entities){
+  const usd=(entities||[]).reduce((s,e)=>s+(+e.balance_usd||0),0);
+  const lbp=(entities||[]).reduce((s,e)=>s+(+e.balance_lbp||0),0);
+  return {usd,lbp};
+}
+function renderCustomerBillRow(debt,customer){
+  const paid=billPaid(debt);
+  const waBtn=!paid?`<button type="button" class="btn btn-secondary btn-sm btn-cust-wa" data-id="${debt.id}">WhatsApp</button>`:'';
+  return `<tr data-debt-id="${debt.id}" data-invoice="${debt.invoice_number}">${billInvoiceCells(debt)}<td>${new Date(debt.created_at).toLocaleDateString()}</td><td>${escHtml(debt.description)}</td><td style="text-align:right">$${fmt(debt.amount_usd)}</td><td>${statusToggleBtn(debt,'customer')}</td><td style="white-space:nowrap;display:flex;gap:.35rem;flex-wrap:wrap"><button type="button" class="btn btn-secondary btn-sm btn-edit-bill" data-type="customer" data-id="${debt.id}">Edit</button><button type="button" class="btn btn-secondary btn-sm btn-cust-bill-pdf" data-id="${debt.id}">PDF</button>${waBtn}</td></tr>`;
+}
+function renderSupplierBillRow(debt,supplier){
+  const paid=billPaid(debt);
+  return `<tr data-debt-id="${debt.id}" data-invoice="${debt.invoice_number}">${billInvoiceCells(debt)}<td>${new Date(debt.created_at).toLocaleDateString()}</td><td>${escHtml(debt.description)}</td><td style="text-align:right">$${fmt(debt.amount_usd)}</td><td>${statusToggleBtn(debt,'supplier')}</td><td style="white-space:nowrap;display:flex;gap:.35rem;flex-wrap:wrap"><button type="button" class="btn btn-secondary btn-sm btn-edit-bill" data-type="supplier" data-id="${debt.id}">Edit</button><button type="button" class="btn btn-secondary btn-sm btn-sup-bill-pdf" data-id="${debt.id}">PDF</button><button type="button" class="btn btn-secondary btn-sm btn-sup-wa" data-id="${debt.id}">WhatsApp</button></td></tr>`;
+}
+function entitySummary(entity,type,extra){
+  const name=entity.name;
+  const phone=entity.contact_phone;
+  const balanceUsd=entity.balance_usd;
+  const balanceLbp=entity.balance_lbp;
+  return `<div style="display:flex;flex-wrap:wrap;gap:1rem 2rem;align-items:center;justify-content:space-between"><div style="display:flex;flex-wrap:wrap;gap:1rem 2rem;align-items:baseline">${extra||''}<div><span style="opacity:.7;font-size:.8125rem">Name</span><div style="font-weight:800;font-size:1.1rem">${name}</div></div><div><span style="opacity:.7;font-size:.8125rem">Phone</span><div>${phone||'—'}</div></div><div><span style="opacity:.7;font-size:.8125rem">Outstanding Balance</span><div style="font-weight:700">$${fmt(balanceUsd)} · ${fmtLbp(balanceLbp)} LBP</div></div></div><button type="button" class="btn btn-secondary btn-sm btn-edit-entity" data-type="${type}" data-id="${entity.id}">Edit</button></div>`;
+}
+function wireBillTableActions(type,entity,entityId){
+  const phone=entity?.contact_phone;
+  document.querySelectorAll('.btn-status-toggle').forEach(btn=>{
+    if(btn.dataset.type!==type)return;
+    btn.onclick=async()=>{
+      if(btn.disabled)return;
+      const debtId=+btn.dataset.id;
+      const debts=type==='customer'?S._customerDebts:S._supplierDebts;
+      const debt=(debts||[]).find(d=>d.id===debtId);
+      const wasPaid=btn.dataset.paid==='1';
+      const nextPaid=!wasPaid;
+      btn.disabled=true;
+      btn.textContent=nextPaid?'Paid':'Unpaid';
+      btn.className=`btn-status-toggle badge ${nextPaid?'badge-success':'badge-accent'}`;
+      try{
+        const patch={is_settled:nextPaid};
+        if(type==='customer')await API.patchCustomerDebt(debtId,patch);
+        else await API.patchDebt(debtId,patch);
+        btn.dataset.paid=nextPaid?'1':'0';
+        await (type==='customer'?loadCustomers():loadSuppliers());
+        if(entityId)await (type==='customer'?loadCustomerBills(entityId,$('customer-invoice-search')?.value||''):loadSupplierBills(entityId,$('supplier-invoice-search')?.value||''));
+        toast(nextPaid?'Marked as paid':'Marked as unpaid');
+        if(type==='supplier'&&nextPaid&&debt&&phone)openWhatsApp(phone,supplierPaymentWaText(entity.name,debt));
+      }catch(err){
+        btn.dataset.paid=wasPaid?'1':'0';
+        btn.textContent=wasPaid?'Paid':'Unpaid';
+        btn.className=`btn-status-toggle badge ${wasPaid?'badge-success':'badge-accent'}`;
+        toast(err.message||'Status update failed');
+      }finally{btn.disabled=false;}
+    };
+  });
+  document.querySelectorAll('.btn-edit-bill').forEach(btn=>{
+    if(btn.dataset.type!==type)return;
+    btn.onclick=()=>{
+      const debtId=+btn.dataset.id;
+      const debts=type==='customer'?S._customerDebts:S._supplierDebts;
+      const debt=(debts||[]).find(d=>d.id===debtId);
+      if(!debt)return;
+      $('bill-edit-type').value=type;
+      $('bill-edit-id').value=debt.id;
+      $('bill-edit-desc').value=debt.description;
+      $('bill-edit-ref').value=debt.reference_number||'';
+      $('bill-edit-amount').value=debt.amount_usd;
+      $('bill-edit-due').value=debt.due_date||'';
+      $('bill-edit-modal').classList.remove('hidden');
+    };
+  });
+  if(type==='customer'){
+    document.querySelectorAll('.btn-cust-wa').forEach(btn=>btn.onclick=()=>{
+      const debt=(S._customerDebts||[]).find(d=>d.id===+btn.dataset.id);
+      if(!debt||!entity)return;
+      openWhatsApp(phone,customerWaText(entity.name,debt));
+    });
+  }else{
+    document.querySelectorAll('.btn-sup-wa').forEach(btn=>btn.onclick=()=>{
+      const debt=(S._supplierDebts||[]).find(d=>d.id===+btn.dataset.id);
+      if(!debt||!entity)return;
+      openWhatsApp(phone,supplierWaText(entity.name,debt,billPaid(debt)));
+    });
+  }
+}
+async function searchCustomerInvoice(term){
+  const q=term.trim();
+  if(!q)return;
+  const hits=await API.customerDebtsSearch(q);
+  if(!hits.length){toast('No invoice found');return;}
+  const hit=hits[0];
+  $('customer-filter').value=String(hit.customer_id);
+  await loadCustomerBills(hit.customer_id,q);
+  const row=document.querySelector(`#customer-debt-table tr[data-debt-id="${hit.id}"]`);
+  if(row){row.style.outline='2px solid var(--accent)';row.scrollIntoView({block:'nearest'});}
+}
+async function searchSupplierInvoice(term){
+  const q=term.trim();
+  if(!q)return;
+  const hits=await API.supplierDebtsSearch(q);
+  if(!hits.length){toast('No invoice found');return;}
+  const hit=hits[0];
+  $('supplier-filter').value=String(hit.supplier_id);
+  await loadSupplierBills(hit.supplier_id,q);
+  const row=document.querySelector(`#supplier-debt-table tr[data-debt-id="${hit.id}"]`);
+  if(row){row.style.outline='2px solid var(--accent)';row.scrollIntoView({block:'nearest'});}
+}
+function openEntityEdit(entity,type){
+  $('entity-edit-type').value=type;
+  $('entity-edit-id').value=entity.id;
+  $('entity-edit-name').value=entity.name;
+  $('entity-edit-phone').value=entity.contact_phone||'';
+  $('entity-edit-title').textContent=type==='customer'?'Edit Customer':'Edit Supplier';
+  const catWrap=$('entity-edit-category-wrap');
+  if(type==='supplier'){
+    catWrap.classList.remove('hidden');
+    $('entity-edit-category').value=entity.category||'';
+    $('entity-edit-category').required=true;
+  }else{
+    catWrap.classList.add('hidden');
+    $('entity-edit-category').required=false;
+  }
+  $('entity-edit-modal').classList.remove('hidden');
+}
+function logout(){Auth.logout().finally(()=>{location.href='/login?portal=admin';});}
+function goLogin(){location.href='/login?portal=admin';}
+function visibleTabs(){return TABS.filter(t=>S.perms[t.perm]||S.perms.admin_dashboard);}
+function permCheckboxes(container,prefix,selected={}){container.innerHTML=PERM_KEYS.map(k=>`<label><input type="checkbox" name="${prefix}${k}" ${selected[k]?'checked':''} /> ${PERM_LABELS[k]||k}</label>`).join('');}
+function readPerms(prefix){const o={};PERM_KEYS.forEach(k=>{const el=document.querySelector(`[name="${prefix}${k}"]`);if(el)o[k]=el.checked;});return o;}
+function nav(){const tabs=visibleTabs();if(!tabs.find(t=>t.id===S.tab))S.tab=tabs[0]?.id||'reports';
+  $('sidebar-nav').innerHTML=tabs.map(t=>`<button class="sidebar-link ${S.tab===t.id?'active':''}" data-tab="${t.id}">${t.label}</button>`).join('');
+  document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));}
+function switchTab(id){S.tab=id;document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));$(`panel-${id}`)?.classList.add('active');nav();
+  const load=(fn,label)=>BobUI.safeLoad(fn,label);
+  if(id==='reports')load(loadReports,'reports');if(id==='catalog')load(loadCatalog,'catalog');if(id==='recipes')load(loadRecipes,'recipes');if(id==='modifiers')load(loadModifiers,'modifiers');if(id==='inventory')load(loadInventory,'inventory');
+  if(id==='customers')load(loadCustomers,'customers');if(id==='suppliers')load(loadSuppliers,'suppliers');
+  if(id==='expenses')load(loadExpenses,'expenses');if(id==='transactions')load(loadTransactions,'transactions');if(id==='users')load(loadUsers,'users');if(id==='settings')load(loadSettingsPanel,'settings');}
+function kpi(l,usd,lbp){return `<div class="card kpi"><div class="kpi-label">${l}</div><div class="kpi-value">$${fmt(usd)}</div><div class="kpi-sub">${fmtLbp(lbp||usd*S.rate)} LBP</div></div>`;}
+const CHART_COMPACT={
+  maintainAspectRatio:false,
+  plugins:{legend:{labels:{font:{size:11},color:'#a3a3a3',boxWidth:12}}},
+  scales:{
+    y:{ticks:{font:{size:10},color:'#a3a3a3',maxTicksLimit:6},grid:{color:'rgba(163,163,163,.15)'}},
+    x:{ticks:{font:{size:10},color:'#a3a3a3',maxRotation:45,minRotation:0},grid:{display:false}}
+  }
+};
+function destroyChart(key){if(S.charts[key]){S.charts[key].destroy();S.charts[key]=null;}}
+async function loadReports(){
+  const gen=_reportsGuard.next();
+  const refreshBtn=$('btn-refresh');
+  if(refreshBtn)refreshBtn.disabled=true;
+  try{
+    $('period-btns').innerHTML=['daily','weekly','monthly','annual'].map(p=>`<button class="cat-pill ${S.period===p?'active':''}" data-p="${p}">${p[0].toUpperCase()+p.slice(1)}</button>`).join('');
+    $('period-btns').querySelectorAll('[data-p]').forEach(b=>b.onclick=()=>{S.period=b.dataset.p;BobUI.safeLoad(loadReports,'reports');});
+    const[d,sync]=await Promise.all([API.dashboard(S.period,S.opId,S.branchId),API.syncStatus().catch(()=>null)]);
+    if(_reportsGuard.isStale(gen))return;
+  const branchLabel=S.branchId?(S.branches.find(b=>String(b.id)===String(S.branchId))?.name||`Branch #${S.branchId}`):'All Branches';
+  $('kpi-cards').innerHTML=[
+    kpi('Net Revenue',d.total,d.total_lbp),
+    kpi('Gross',d.gross_total_usd||d.subtotal),
+    kpi('Commissions',d.total_commission_usd||0),
+    kpi('Cash',d.cash_total),
+    kpi('Wish',d.wish_total||0),
+  ].join('');
+  if(sync)$('sync-status-card').innerHTML=`<strong>Multi-Branch</strong> &middot; View: <strong>${branchLabel}</strong> &middot; Server branch <strong>${sync.branch_code}</strong> &middot; Pending sync: <strong>${sync.pending_count}</strong> &middot; Failed: <strong>${sync.failed_count}</strong>`;
+  else $('sync-status-card').innerHTML='';
+
+  const payRows=(d.payment_breakdown||[]).filter(p=>+p.total_usd>0);
+  const payLabels=payRows.length?payRows.map(p=>p.label):['Cash','Wish','Card','Mobile'];
+  const payData=payRows.length?payRows.map(p=>+p.total_usd):[+d.cash_total,+d.wish_total||0,+d.card_total,+d.mobile_total];
+  destroyChart('pay');
+  S.charts.pay=new Chart($('chart-pay'),{
+    type:'doughnut',
+    data:{labels:payLabels,datasets:[{data:payData,backgroundColor:['#f97316','#a855f7','#374151','#facc15']}]},
+    options:{...CHART_COMPACT,plugins:{...CHART_COMPACT.plugins,legend:{position:'bottom',labels:{font:{size:11},color:'#a3a3a3',boxWidth:12}}},scales:undefined}
+  });
+
+  const ops=d.operator_breakdown||[];
+  destroyChart('emp');
+  S.charts.emp=new Chart($('chart-emp'),{
+    type:'bar',
+    data:{labels:ops.map(o=>o.operator_name),datasets:[{data:ops.map(o=>+o.total),backgroundColor:'#f97316',borderRadius:6}]},
+    options:{...CHART_COMPACT,plugins:{legend:{display:false}}}
+  });
+  $('emp-table').innerHTML=ops.map(o=>`<tr><td>${o.operator_name}</td><td>${o.invoice_count}</td>${dualCell(o.total)}</tr>`).join('')||'<tr><td colspan="3">No data</td></tr>';
+
+  const hours=d.peak_sales_hours||[];
+  const hourLabels=Array.from({length:24},(_,i)=>`${String(i).padStart(2,'0')}:00`);
+  const hourData=hourLabels.map((_,i)=>{const m=hours.find(h=>h.hour===i);return m?m.invoice_count:0;});
+  destroyChart('hours');
+  S.charts.hours=new Chart($('chart-hours'),{
+    type:'bar',
+    data:{labels:hourLabels,datasets:[{label:'Invoices',data:hourData,backgroundColor:'#facc15',borderRadius:4}]},
+    options:{...CHART_COMPACT,plugins:{legend:{display:false}}}
+  });
+
+  const top=d.top_selling_products||[];
+  destroyChart('topProducts');
+  S.charts.topProducts=new Chart($('chart-top-products'),{
+    type:'bar',
+    data:{
+      labels:top.map(p=>p.product_name),
+      datasets:[{label:'Qty Sold',data:top.map(p=>p.quantity_sold),backgroundColor:'#22c55e',borderRadius:6}]
+    },
+    options:{...CHART_COMPACT,indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{...CHART_COMPACT.scales.x,grid:{color:'rgba(163,163,163,.15)'}},y:{...CHART_COMPACT.scales.y,grid:{display:false}}}}
+  });
+  }catch(err){
+    if(_reportsGuard.isStale(gen))return;
+    BobUI.toastErr(err,'Failed to load reports');
+  }finally{
+    if(!_reportsGuard.isStale(gen)&&refreshBtn)refreshBtn.disabled=false;
+  }
+}
+async function loadCatalog(){
+  const[cats,prods]=await Promise.all([API.categories(),API.products()]);
+  S.cats=cats;S.prods=prods;
+  $('cat-table').innerHTML=cats.map(c=>`<tr><td>${c.name}</td><td>${c.sort_order}</td><td style="text-align:right;white-space:nowrap"><button class="btn btn-secondary btn-sm edit-cat" data-id="${c.id}">Edit</button> <button class="btn btn-danger btn-sm del-cat" data-id="${c.id}">Remove</button></td></tr>`).join('');
+  $('prod-cat').innerHTML=cats.filter(c=>c.is_active).map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  $('prod-edit-cat').innerHTML=cats.filter(c=>c.is_active).map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  $('prod-table').innerHTML=prods.filter(p=>p.is_active).map(p=>{
+    const pricing=p.sizes_enabled?`$${fmt(p.price_s)} / $${fmt(p.price_m??p.unit_price)} / $${fmt(p.price_l)}`:`$${fmt(p.unit_price)}`;
+    return `<tr><td><strong>${p.name}</strong></td><td>${p.category}</td><td style="text-align:right;white-space:nowrap">${pricing}</td><td style="text-align:right;white-space:nowrap"><button class="btn btn-secondary btn-sm edit-prod" data-id="${p.id}">Edit</button> <button class="btn btn-danger btn-sm del-prod" data-id="${p.id}">Del</button></td></tr>`;
+  }).join('');
+  document.querySelectorAll('.edit-cat').forEach(b=>b.onclick=()=>{const c=S.cats.find(x=>x.id===+b.dataset.id);$('cat-edit-id').value=c.id;$('cat-edit-name').value=c.name;$('cat-edit-order').value=c.sort_order;$('cat-edit-modal').classList.remove('hidden');});
+  document.querySelectorAll('.edit-prod').forEach(b=>b.onclick=()=>{
+    const p=S.prods.find(x=>x.id===+b.dataset.id);
+    $('prod-edit-id').value=p.id;$('prod-edit-name').value=p.name;$('prod-edit-cat').value=p.category_id;
+    $('prod-edit-sizes-enabled').checked=!!p.sizes_enabled;
+    $('prod-edit-price').value=p.unit_price;
+    $('prod-edit-price-s').value=p.price_s??'';
+    $('prod-edit-price-m').value=p.price_m??'';
+    $('prod-edit-price-l').value=p.price_l??'';
+    syncProdEditPriceMode();
+    $('prod-edit-modal').classList.remove('hidden');
+  });
+  document.querySelectorAll('.del-cat').forEach(b=>b.onclick=async()=>{try{await API.req(`/api/catalog/categories/${b.dataset.id}`,{method:'DELETE'});toast('Category removed');loadCatalog();loadRecipes();}catch(e){toast(e.message||'Failed');}});
+  document.querySelectorAll('.del-prod').forEach(b=>b.onclick=async()=>{try{await API.req(`/api/catalog/products/${b.dataset.id}`,{method:'DELETE'});toast('Product removed');loadCatalog();loadRecipes();}catch(e){toast(e.message||'Failed');}});
+}
+const RECIPE_UNITS=['g','kg','ml','L','pcs'];
+let recipeBaseRows=[];
+function renderRecipeBaseRows(){
+  $('recipe-base-rows').innerHTML=recipeBaseRows.map((r,i)=>`<div class="recipe-row" data-i="${i}" style="display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:.5rem;align-items:end;margin-bottom:.5rem"><div class="input-group" style="margin:0"><label>Ingredient</label><input class="input recipe-base-inv" list="recipe-inv-list" value="${r.name||''}" placeholder="Inventory item…" /></div><div class="input-group" style="margin:0"><label>Qty / unit</label><input type="number" step="0.001" min="0.001" class="input recipe-base-qty" value="${r.quantity_per_sale||''}" /></div><div class="input-group" style="margin:0"><label>Unit</label><select class="select recipe-base-unit">${RECIPE_UNITS.map(u=>`<option value="${u}" ${r.metric_unit===u?'selected':''}>${u}</option>`).join('')}</select></div><button type="button" class="btn btn-ghost btn-sm recipe-base-rm" data-i="${i}">✕</button></div>`).join('')||'<p style="color:var(--text-secondary);font-size:.875rem">No base ingredients yet.</p>';
+  document.querySelectorAll('.recipe-base-rm').forEach(b=>b.onclick=()=>{recipeBaseRows.splice(+b.dataset.i,1);renderRecipeBaseRows();});
+}
+async function loadRecipes(){
+  const[prods,items]=await Promise.all([API.products(),API.invItems()]);
+  S.prods=prods;S.invItems=items;
+  $('recipe-inv-list').innerHTML=items.map(i=>`<option value="${i.name}" data-id="${i.id}" data-unit="${i.unit}"></option>`).join('');
+  const sel=$('recipe-product-filter');
+  const prev=sel.value;
+  sel.innerHTML='<option value="">— Choose a product —</option>'+prods.filter(p=>p.is_active!==false).map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+  if(prev&&prods.some(p=>String(p.id)===prev))sel.value=prev;
+  if(sel.value)await loadRecipeEditor(+sel.value);
+  else{$('recipe-editor-wrap').classList.add('hidden');recipeBaseRows=[];}
+}
+async function loadRecipeEditor(productId){
+  const bundle=await API.recipesForProduct(productId);
+  recipeBaseRows=(bundle.base||[]).map(r=>({inventory_item_id:r.inventory_item_id,name:r.inventory_item_name,quantity_per_sale:r.quantity_per_sale,metric_unit:r.metric_unit||'g'}));
+  if(!recipeBaseRows.length)recipeBaseRows=[{name:'',quantity_per_sale:'',metric_unit:'g'}];
+  renderRecipeBaseRows();
+  $('recipe-editor-wrap').classList.remove('hidden');
+}
+$('recipe-product-filter').onchange=async()=>{const id=+$('recipe-product-filter').value;if(id)await loadRecipeEditor(id);else{$('recipe-editor-wrap').classList.add('hidden');recipeBaseRows=[];}};
+$('recipe-add-base').onclick=()=>{recipeBaseRows.push({name:'',quantity_per_sale:'',metric_unit:'g'});renderRecipeBaseRows();};
+$('recipe-save').onclick=async()=>{
+  const productId=+$('recipe-product-filter').value;
+  if(!productId){toast('Select a product');return;}
+  const invByName=new Map((S.invItems||[]).map(i=>[i.name.toLowerCase(),i]));
+  const base=[];
+  for(const rowEl of document.querySelectorAll('#recipe-base-rows .recipe-row')){
+    const name=rowEl.querySelector('.recipe-base-inv').value.trim();
+    const qty=+rowEl.querySelector('.recipe-base-qty').value;
+    const unit=rowEl.querySelector('.recipe-base-unit').value;
+    if(!name)continue;
+    const inv=invByName.get(name.toLowerCase());
+    if(!inv){toast(`Unknown ingredient: ${name}`);return;}
+    if(!qty||qty<=0){toast(`Invalid qty for ${name}`);return;}
+    base.push({inventory_item_id:inv.id,quantity_per_sale:qty,metric_unit:unit});
+  }
+  try{await API.saveProductRecipes(productId,{base});toast('Base recipe saved');await loadRecipeEditor(productId);}catch(e){toast(e.message);}
+};
+async function loadModifiers(){
+  const[mods,items]=await Promise.all([API.globalModifiers(),API.invItems()]);
+  S.globalMods=mods;S.invItems=items;
+  $('mod-inv-list').innerHTML=items.map(i=>`<option value="${i.name}" data-id="${i.id}"></option>`).join('');
+  $('mod-table').innerHTML=mods.filter(m=>m.is_active!==false).map(m=>`<tr><td><strong>${m.name}</strong></td><td>${m.inventory_item_name}</td><td style="text-align:right">$${Number(m.extra_price_usd).toFixed(2)}</td><td style="text-align:right">${m.quantity_per_sale}</td><td>${m.metric_unit||'—'}</td><td style="text-align:right;white-space:nowrap"><button class="btn btn-danger btn-sm mod-del" data-id="${m.id}">Remove</button></td></tr>`).join('')||'<tr><td colspan="6">No global modifiers yet — add one above.</td></tr>';
+  document.querySelectorAll('.mod-del').forEach(b=>b.onclick=async()=>{try{await API.deleteGlobalModifier(+b.dataset.id);toast('Removed');loadModifiers();}catch(e){toast(e.message);}});
+}
+$('mod-add-btn').onclick=async()=>{
+  const name=$('mod-new-name').value.trim();
+  const invName=$('mod-new-inv').value.trim();
+  const price=+$('mod-new-price').value||0;
+  const qty=+$('mod-new-qty').value;
+  const unit=$('mod-new-unit').value;
+  if(!name){toast('Name required');return;}
+  const inv=(S.invItems||[]).find(i=>i.name.toLowerCase()===invName.toLowerCase());
+  if(!inv){toast('Select a valid inventory item');return;}
+  if(!qty||qty<=0){toast('Stock qty required');return;}
+  try{
+    await API.addGlobalModifier({name,inventory_item_id:inv.id,extra_price_usd:price,quantity_per_sale:qty,metric_unit:unit});
+    $('mod-new-name').value='';$('mod-new-inv').value='';$('mod-new-price').value='0';$('mod-new-qty').value='';
+    toast('Modifier added');loadModifiers();
+  }catch(e){toast(e.message);}
+};
+async function loadExpenses(){const rows=await API.expenses(S.branchId);$('expense-table').innerHTML=rows.map(e=>`<tr><td>${e.expense_date}</td><td>${e.description}</td><td><span class="badge badge-accent">${e.category}</span></td>${dualCell(e.amount_usd,e.amount_lbp)}</tr>`).join('')||'<tr><td colspan="4">No expenses</td></tr>';}
+function txnDiscountCell(t){
+  const usd=+t.discount_amount_usd||0;
+  if(usd<=0)return '—';
+  return `<span style="color:var(--success)">-$${fmt(usd)}</span><br/><small>${fmtLbp(t.discount_amount_lbp)} LBP</small>`;
+}
+function saleWaText(t){
+  return `شكراً لزيارتكم BOB JUICE ✨\nفاتورة رقم #${t.sale_number}\nالتاريخ: ${new Date(t.finalized_at).toLocaleString()}\nالبنود: ${t.items_summary}\nالإجمالي: $${fmt(t.net_total_usd)} USD / ${fmtLbp(t.net_total_lbp)} LBP\nنتمنى لكم يوماً منعشاً! 🍹`;
+}
+function openTxnReceiptModal(t){
+  S._activeTxn=t;
+  $('txn-modal-num').textContent=t.sale_number;
+  $('txn-modal-body').innerHTML=`<div><strong>Items:</strong> ${escHtml(t.items_summary)}</div><div style="margin-top:.5rem"><strong>Total:</strong> $${fmt(t.net_total_usd)} / ${fmtLbp(t.net_total_lbp)} LBP</div><div style="margin-top:.35rem;color:var(--text-secondary);font-size:.8125rem">${new Date(t.finalized_at).toLocaleString()} · ${escHtml(t.operator_name)} · ${escHtml(t.payment_method)}</div>`;
+  $('txn-receipt-modal').classList.remove('hidden');
+}
+function txnFilterParams(){
+  const sale=$('txn-search').value.trim();
+  const mode=$('txn-date-mode').value;
+  const q={};
+  if(sale)q.sale=sale;
+  if(mode==='day'&&$('txn-date-day').value){q.date_from=$('txn-date-day').value;q.date_to=$('txn-date-day').value;}
+  if(mode==='range'){
+    if($('txn-date-from').value)q.date_from=$('txn-date-from').value;
+    if($('txn-date-to').value)q.date_to=$('txn-date-to').value;
+  }
+  return q;
+}
+function syncTxnDateMode(){
+  const mode=$('txn-date-mode').value;
+  $('txn-day-wrap').classList.toggle('hidden',mode!=='day');
+  $('txn-from-wrap').classList.toggle('hidden',mode!=='range');
+  $('txn-to-wrap').classList.toggle('hidden',mode!=='range');
+}
+async function loadTransactions(){
+  syncTxnDateMode();
+  const rows=await API.transactions(txnFilterParams());
+  S._transactions=rows;
+  $('txn-table').innerHTML=rows.length?rows.map(t=>`<tr data-sale="${t.sale_number}"><td><strong>#${t.sale_number}</strong></td><td style="white-space:nowrap">${new Date(t.finalized_at).toLocaleString()}</td><td class="txn-items-cell">${escHtml(t.items_summary)}</td><td>${txnDiscountCell(t)}</td><td style="text-align:right" class="dual-cell"><span class="usd">$${fmt(t.net_total_usd)}</span><span class="lbp">${fmtLbp(t.net_total_lbp)} LBP</span></td><td style="white-space:nowrap"><button type="button" class="btn btn-secondary btn-sm btn-txn-view" data-id="${t.invoice_id}">View Receipt</button> <button type="button" class="btn btn-secondary btn-sm btn-txn-wa" data-id="${t.id}">WhatsApp</button></td></tr>`).join(''):'';
+  $('txn-empty').classList.toggle('hidden',rows.length>0);
+  document.querySelectorAll('.btn-txn-view').forEach(b=>b.onclick=()=>{const t=(S._transactions||[]).find(x=>x.invoice_id===+b.dataset.id);if(t)openTxnReceiptModal(t);});
+  document.querySelectorAll('.btn-txn-wa').forEach(b=>b.onclick=()=>{const t=(S._transactions||[]).find(x=>x.id===+b.dataset.id);if(t)openWhatsApp('',saleWaText(t));});
+}
+function syncStockOutUnit(){const m=S.invItems.find(i=>i.name.toLowerCase()===$('so-item').value.trim().toLowerCase());$('so-unit').value=m?m.unit:'';$('so-unit').readOnly=!!m;}
+const INPUT_UNIT_FOR_CANON={g:'g',ml:'ml',pcs:'pcs'};
+function canonToInputUnit(u){return INPUT_UNIT_FOR_CANON[u]||'g';}
+function unlockSiItem(){
+  $('si-item-id').value='';
+  $('si-item-lock').classList.add('hidden');
+  $('si-item-lock').textContent='';
+  $('si-unit').disabled=false;
+}
+function lockSiItem(row){
+  $('si-item').value=row.name;
+  $('si-item-id').value=row.id;
+  $('si-unit').value=canonToInputUnit(row.unit);
+  $('si-unit').disabled=true;
+  $('si-item-lock').textContent=`Locked: ${row.name} · stored in ${row.unit} · on hand ${row.current_stock} ${row.unit}`;
+  $('si-item-lock').classList.remove('hidden');
+  $('si-suggest').classList.add('hidden');
+}
+let siSuggestTimer=null;
+async function refreshSiSuggest(){
+  const q=$('si-item').value.trim();
+  if($('si-item-id').value&&S._siLockedName&&S._siLockedName.toLowerCase()===q.toLowerCase()){$('si-suggest').classList.add('hidden');return;}
+  if($('si-item-id').value&&S._siLockedName&&S._siLockedName.toLowerCase()!==q.toLowerCase())unlockSiItem();
+  try{
+    const rows=await API.invSuggest(q);
+    const box=$('si-suggest');
+    if(!rows.length){box.classList.add('hidden');box.innerHTML='';return;}
+    box.innerHTML=rows.map((r,i)=>`<button type="button" class="inv-suggest-opt" data-idx="${i}"><span class="inv-suggest-name">${escHtml(r.name)}</span><span class="inv-suggest-meta">${r.current_stock} ${r.unit}</span></button>`).join('');
+    box.classList.remove('hidden');
+    S._siSuggestRows=rows;
+    box.querySelectorAll('.inv-suggest-opt').forEach(b=>b.onclick=()=>{const r=S._siSuggestRows[+b.dataset.idx];if(!r)return;S._siLockedName=r.name;lockSiItem(r);});
+  }catch(_){$('si-suggest').classList.add('hidden');}
+}
+function bindLiveSuggest(inputId,suggestId,fetchFn,onPick,metaFn){
+  const inp=$(inputId),box=$(suggestId);
+  if(!inp||inp._boundSuggest)return;
+  inp._boundSuggest=true;
+  let timer=null;
+  async function refresh(){
+    const q=inp.value.trim();
+    try{
+      const rows=await fetchFn(q);
+      if(!rows.length){box.classList.add('hidden');box.innerHTML='';return;}
+      box.innerHTML=rows.map((r,i)=>`<button type="button" class="inv-suggest-opt" data-idx="${i}"><span class="inv-suggest-name">${escHtml(r.name)}</span><span class="inv-suggest-meta">${metaFn?escHtml(metaFn(r)||''):''}</span></button>`).join('');
+      box.classList.remove('hidden');
+      S[`_${inputId}Rows`]=rows;
+      box.querySelectorAll('.inv-suggest-opt').forEach(b=>b.onclick=()=>{const r=S[`_${inputId}Rows`][+b.dataset.idx];if(!r)return;onPick(r);box.classList.add('hidden');});
+    }catch(_){box.classList.add('hidden');}
+  }
+  inp.addEventListener('input',()=>{clearTimeout(timer);timer=setTimeout(refresh,180);});
+  inp.addEventListener('focus',()=>{clearTimeout(timer);timer=setTimeout(refresh,80);});
+}
+function bindFinanceSuggests(){
+  bindLiveSuggest('si-supplier','si-supplier-suggest',API.supplierSuggest,r=>{$('si-supplier').value=r.name;if($('si-supplier-id'))$('si-supplier-id').value=r.id;},r=>r.category||'');
+  bindLiveSuggest('debt-customer-input','debt-customer-suggest',API.customerSuggest,r=>{$('debt-customer-input').value=r.name;},r=>r.contact_phone||'');
+  bindLiveSuggest('debt-supplier-input','debt-supplier-suggest',API.supplierSuggest,r=>{$('debt-supplier-input').value=r.name;if($('debt-supplier-cat'))$('debt-supplier-cat').value=r.category||'';},r=>r.category||'');
+  bindLiveSuggest('customer-filter-search','customer-filter-suggest',API.customerSuggest,r=>{const sel=$('customer-filter');if(sel)sel.value=String(r.id);$('customer-filter-search').value=r.name;loadCustomerBills(r.id);},r=>r.contact_phone||'');
+  bindLiveSuggest('supplier-filter-search','supplier-filter-suggest',API.supplierSuggest,r=>{const sel=$('supplier-filter');if(sel)sel.value=String(r.id);$('supplier-filter-search').value=r.name;loadSupplierBills(r.id);},r=>r.category||'');
+  document.addEventListener('click',e=>{if(!e.target.closest('.inv-suggest-wrap'))document.querySelectorAll('.inv-suggest-dropdown').forEach(el=>{if(el.id!=='si-suggest')el.classList.add('hidden');});});
+}
+function bindInventorySuggest(){
+  const inp=$('si-item');
+  if(!inp||inp._boundSuggest)return;
+  inp._boundSuggest=true;
+  inp.addEventListener('input',()=>{clearTimeout(siSuggestTimer);siSuggestTimer=setTimeout(refreshSiSuggest,180);});
+  inp.addEventListener('focus',()=>{clearTimeout(siSuggestTimer);siSuggestTimer=setTimeout(refreshSiSuggest,80);});
+  document.addEventListener('click',e=>{if(!e.target.closest('.inv-suggest-wrap'))$('si-suggest')?.classList.add('hidden');});
+}
+async function loadInventory(){
+  bindInventorySuggest();
+  bindFinanceSuggests();
+  const q=S.branchId?`?branch_id=${encodeURIComponent(S.branchId)}`:'';
+  const[items,ledger,intakes,sups]=await Promise.all([API.invItems(S.branchId),API.ledger(),API.intakes(S.branchId),API.suppliers()]);
+  S.invItems=items;S.suppliers=sups;
+  $('inv-item-list').innerHTML=items.map(i=>`<option value="${i.name}" data-unit="${i.unit}"></option>`).join('');
+  $('supplier-list-inv').innerHTML=sups.map(s=>`<option value="${s.name}"></option>`).join('');
+  $('inv-stock-table').innerHTML=items.map(i=>`<tr><td style="font-weight:600">${escHtml(i.name)}</td><td><span class="badge badge-dark">${i.unit}</span></td><td style="text-align:right;font-weight:700">${i.current_stock}</td><td style="text-align:right">${i.reorder_level}</td></tr>`).join('')||'<tr><td colspan="4">No inventory items yet</td></tr>';
+  $('intake-table').innerHTML=intakes.map(i=>`<tr><td>${i.intake_date}</td><td>${i.supplier_name}</td><td>${i.inventory_item_name}</td><td>${i.quantity} ${i.unit}</td><td>$${fmt(i.total_cost_usd)}</td><td><span class="badge badge-accent">${i.payment_status}</span></td></tr>`).join('')||'<tr><td colspan="6">No intake records</td></tr>';
+  $('ledger-table').innerHTML=ledger.filter(m=>m.movement_type==='out').map(m=>`<tr><td style="white-space:nowrap">${new Date(m.created_at).toLocaleString()}</td><td>${m.inventory_name}</td><td>${m.quantity}</td><td>${m.balance_after}</td><td>${m.notes||m.reference||'—'}</td></tr>`).join('')||'<tr><td colspan="5">No stock out records</td></tr>';
+  if(!$('si-intake-date').value)$('si-intake-date').value=new Date().toISOString().slice(0,10);
+}
+async function submitUnifiedStockIn(e){
+  e.preventDefault();
+  const item=$('si-item').value.trim();
+  const itemId=+$('si-item-id').value||null;
+  const qty=+$('si-qty').value;
+  const unit=($('si-unit').value||'pcs').trim();
+  const notes=$('si-notes').value||null;
+  const supplier=$('si-supplier').value.trim();
+  const supplierId=+$('si-supplier-id')?.value||null;
+  const unitCost=+$('si-cost').value||0;
+  const isPurchase=Boolean(supplier)||unitCost>0;
+  try{
+    if(isPurchase){
+      if(!supplier){toast('Supplier required for purchase intake');return;}
+      if(unitCost<=0){toast('Unit cost required for purchase intake');return;}
+      const match=S.suppliers.find(s=>s.name.toLowerCase()===supplier.toLowerCase());
+      const payload={
+        inventory_item_name:item,quantity:qty,unit,unit_cost_usd:unitCost,
+        payment_status:$('si-pay').value,amount_paid_usd:+$('si-paid').value||0,
+        intake_date:$('si-intake-date').value||new Date().toISOString().slice(0,10),notes,
+      };
+      if(itemId)payload.inventory_item_id=itemId;
+      if(supplierId)payload.supplier_id=supplierId;
+      else if(match)payload.supplier_id=match.id;else payload.supplier_name=supplier;
+      await API.addIntake(payload);
+      toast('Purchase intake recorded');
+    }else{
+      const payload={inventory_item_name:item,quantity:qty,unit,notes};
+      if(itemId)payload.inventory_item_id=itemId;
+      await API.stockIn(payload);
+      toast('Stock received');
+    }
+    e.target.reset();
+    unlockSiItem();
+    S._siLockedName=null;
+    if($('si-intake-date'))$('si-intake-date').value=new Date().toISOString().slice(0,10);
+    loadInventory();
+  }catch(err){toast(err.message);}
+}
+async function loadCustomers(){
+  bindFinanceSuggests();
+  const customers=await API.customers();
+  S.customers=customers;
+  const tot=sumOutstanding(customers);
+  $('customer-outstanding-summary').innerHTML=outstandingSummaryHtml(tot.usd,tot.lbp,'Total Outstanding Debts (Receivables)');
+  $('customer-list').innerHTML=customers.map(c=>`<option value="${c.name}"></option>`).join('');
+  const sel=$('customer-filter');
+  const prev=sel.value;
+  sel.innerHTML='<option value="">— Choose a customer —</option>'+customers.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  if(prev&&customers.some(c=>String(c.id)===prev))sel.value=prev;
+  if(sel.value)await loadCustomerBills(+sel.value);
+  else{$('customer-bills-wrap').classList.add('hidden');$('customer-debt-table').innerHTML='';}
+}
+async function loadCustomerBills(customerId,searchQ){
+  const customer=(S.customers||[]).find(c=>c.id===customerId);
+  if(!customer){$('customer-bills-wrap').classList.add('hidden');return;}
+  const debts=await API.customerDebtsById(customerId,searchQ||'');
+  S._customerDebts=debts;
+  $('customer-summary').innerHTML=entitySummary(customer,'customer');
+  $('customer-debt-table').innerHTML=debts.length?debts.map(d=>renderCustomerBillRow(d,customer)).join(''):'<tr><td colspan="7">No invoices for this customer</td></tr>';
+  $('customer-bills-wrap').classList.remove('hidden');
+  document.querySelectorAll('.btn-cust-bill-pdf').forEach(b=>b.onclick=async()=>{try{await downloadPdf(`/api/reports/export/customer-debt/${b.dataset.id}/pdf`,`bob-juice-customer-bill-${b.dataset.id}.pdf`);toast('PDF downloaded');}catch(e){toast(e.message);}});
+  document.querySelectorAll('.btn-edit-entity[data-type="customer"]').forEach(b=>b.onclick=()=>openEntityEdit(customer,'customer'));
+  wireBillTableActions('customer',customer,customerId);
+}
+async function loadSuppliers(){
+  bindFinanceSuggests();
+  const suppliers=await API.suppliers();
+  S.suppliers=suppliers;
+  const tot=sumOutstanding(suppliers);
+  $('supplier-outstanding-summary').innerHTML=outstandingSummaryHtml(tot.usd,tot.lbp,'Total Outstanding Debts (Payables)');
+  $('supplier-list').innerHTML=suppliers.map(s=>`<option value="${s.name}" data-cat="${s.category}"></option>`).join('');
+  const sel=$('supplier-filter');
+  const prev=sel.value;
+  sel.innerHTML='<option value="">— Choose a supplier —</option>'+suppliers.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+  if(prev&&suppliers.some(s=>String(s.id)===prev))sel.value=prev;
+  if(sel.value)await loadSupplierBills(+sel.value);
+  else{$('supplier-bills-wrap').classList.add('hidden');$('supplier-debt-table').innerHTML='';}
+}
+async function loadSupplierBills(supplierId,searchQ){
+  const supplier=(S.suppliers||[]).find(s=>s.id===supplierId);
+  if(!supplier){$('supplier-bills-wrap').classList.add('hidden');return;}
+  const debts=await API.supplierDebtsById(supplierId,searchQ||'');
+  S._supplierDebts=debts;
+  $('supplier-summary').innerHTML=entitySummary(supplier,'supplier',`<div><span style="opacity:.7;font-size:.8125rem">Category</span><div>${supplier.category}</div></div>`);
+  $('supplier-debt-table').innerHTML=debts.length?debts.map(d=>renderSupplierBillRow(d,supplier)).join(''):'<tr><td colspan="7">No invoices for this supplier</td></tr>';
+  $('supplier-bills-wrap').classList.remove('hidden');
+  document.querySelectorAll('.btn-sup-bill-pdf').forEach(b=>b.onclick=async()=>{try{await downloadPdf(`/api/reports/export/supplier-debt/${b.dataset.id}/pdf`,`bob-juice-supplier-bill-${b.dataset.id}.pdf`);toast('PDF downloaded');}catch(e){toast(e.message);}});
+  document.querySelectorAll('.btn-edit-entity[data-type="supplier"]').forEach(b=>b.onclick=()=>openEntityEdit(supplier,'supplier'));
+  wireBillTableActions('supplier',supplier,supplierId);
+}
+async function loadUsers(){S.users=await API.listUsers();$('users-table').innerHTML=S.users.map(u=>`<tr><td>${u.full_name}</td><td>${u.username}</td><td><span class="badge badge-accent">${u.role}</span></td><td>${u.is_active?'<span class="badge badge-success">Active</span>':'Inactive'}</td><td style="text-align:right"><button class="btn btn-secondary btn-sm edit-btn" data-id="${u.id}">Edit</button></td></tr>`).join('');
+  document.querySelectorAll('.edit-btn').forEach(b=>b.onclick=()=>{const u=S.users.find(x=>x.id===+b.dataset.id);$('edit-id').value=u.id;$('edit-name').value=u.full_name;$('edit-role').value=u.role;$('edit-active').value=String(u.is_active);permCheckboxes($('edit-perms'),'ep_',u.permissions||{});$('edit-modal').classList.remove('hidden');});}
+async function refreshBranchFilter(){
+  try{S.branches=await API.branches();$('branch-filter').innerHTML='<option value="">All Branches (Consolidated)</option>'+S.branches.map(b=>`<option value="${b.id}">${b.name}</option>`).join('');}catch(_){$('branch-filter').innerHTML='<option value="">All Branches</option>';}
+}
+async function loadSettingsPanel(){
+  try{
+  await loadSettingsBranchesCache();
+  const rows=S.settingsBranches||[];
+  $('branches-table').innerHTML=rows.map(b=>`<tr>
+    <td><span class="badge badge-accent">${b.code}</span></td>
+    <td>${b.name}${b.is_central?' <span class="badge badge-success">Central</span>':''}</td>
+    <td>${b.location||'—'}</td>
+    <td>${b.phone||'—'}</td>
+    <td>${b.is_active?'<span class="badge badge-success">Active</span>':'<span class="badge">Inactive</span>'}</td>
+    <td><button type="button" class="btn btn-secondary btn-sm branch-edit-btn" data-id="${b.id}">Edit</button></td>
+  </tr>`).join('')||'<tr><td colspan="6">No branches</td></tr>';
+  document.querySelectorAll('.branch-edit-btn').forEach(btn=>btn.onclick=()=>openBranchEdit(+btn.dataset.id));
+  try{
+    const ts=await API.timeStatus();
+    const local=new Date().toLocaleString();
+    const last=ts.last_time_sync_at?new Date(ts.last_time_sync_at).toLocaleString():'Never';
+    $('time-sync-status').textContent=`PC: ${local} · Last sync: ${last} · Offset: ${ts.time_offset_seconds}s`;
+  }catch(_){$('time-sync-status').textContent='';}
+  }catch(err){BobUI.toastErr(err,'settings');}
+}
+function openBranchEdit(id){
+  const b=(S.settingsBranches||[]).find(x=>x.id===id);
+  if(!b){toast('Branch not found — refresh and try again');return;}
+  $('branch-modal-title').textContent='Edit Branch';
+  $('branch-edit-id').value=b.id;
+  $('branch-edit-code').value=b.code;
+  $('branch-edit-name').value=b.name;
+  $('branch-edit-location').value=b.location||'';
+  $('branch-edit-address').value=b.address||'';
+  $('branch-edit-phone').value=b.phone||'';
+  $('branch-edit-active').value=String(b.is_active);
+  $('branch-edit-active-wrap').classList.remove('hidden');
+  $('branch-edit-modal').classList.remove('hidden');
+}
+function openBranchAdd(){
+  $('branch-modal-title').textContent='Add Branch';
+  $('branch-edit-id').value='';
+  $('branch-edit-form').reset();
+  $('branch-edit-active-wrap').classList.add('hidden');
+  $('branch-edit-modal').classList.remove('hidden');
+}
+async function loadSettingsBranchesCache(){
+  try{S.settingsBranches=await API.branchesAll();}
+  catch(err){S.settingsBranches=[];BobUI.toastErr(err,'branches');}
+}
+async function boot(){
+  await BobTabSession.whenReady();
+  const r=await Auth.restore();
+  if(!r.ok){goLogin();return;}
+  S.token=r.token||localStorage.getItem('bob_admin_token');
+  S.user=r.user;
+  if(!S.token){goLogin();return;}
+  BobTabSession.markTabOpen('admin');
+  try{
+    const perms=await API.perms();
+    S.perms=perms.permissions;
+    if(!perms.permissions.admin_dashboard){$('access-denied').classList.remove('hidden');return;}
+    $('admin-app').classList.remove('hidden');$('admin-app').style.display='flex';
+    $('sidebar-user').textContent=S.user?.full_name||'';
+    S.users=await API.listUsers();
+    $('emp-filter').innerHTML='<option value="">All Employees</option>'+S.users.map(u=>`<option value="${u.id}">${u.full_name}</option>`).join('');
+    await refreshBranchFilter();
+    try{const s=await API.settings();S.rate=+s.exchange_rate_usd_lbp;}catch(_){}
+    await loadSettingsBranchesCache();
+    document.querySelector('[name=expense_date]')?.setAttribute('value',new Date().toISOString().slice(0,10));
+    permCheckboxes($('create-perms'),'cp_',{});
+    const tabFromUrl=new URLSearchParams(location.search).get('tab');
+    if(tabFromUrl&&visibleTabs().some(t=>t.id===tabFromUrl))S.tab=tabFromUrl;
+    nav();switchTab(S.tab||visibleTabs()[0]?.id||'reports');
+  }catch(err){
+    BobUI.toastErr(err,'admin dashboard');
+    goLogin();
+  }
+}
+$('theme-toggle').onclick=()=>{const n=document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',n);localStorage.setItem('bob_theme',n);};
+$('go-pos').onclick=()=>location.href='/';$('btn-logout').onclick=logout;$('btn-refresh').onclick=()=>BobUI.safeLoad(loadReports,'reports');
+$('btn-export-pdf').onclick=async()=>{try{const q=new URLSearchParams({period:S.period});if(S.opId)q.set('operator_id',S.opId);await downloadPdf(`/api/reports/export/pdf?${q}`,`bob-juice-${S.period}-report.pdf`);toast('PDF downloaded');}catch(e){toast(e.message);}};
+$('btn-export-exp-pdf').onclick=async()=>{try{await downloadPdf('/api/reports/export/expenses/pdf?period=monthly',`bob-juice-expenses-${new Date().toISOString().slice(0,10)}.pdf`);toast('Expenses PDF downloaded');}catch(e){toast(e.message);}};
+$('btn-export-inv-pdf').onclick=async()=>{try{await downloadPdf('/api/reports/export/inventory/pdf',`bob-juice-inventory-${new Date().toISOString().slice(0,10)}.pdf`);toast('Inventory PDF downloaded');}catch(e){toast(e.message);}};
+$('btn-export-customer-pdf').onclick=async()=>{try{await downloadPdf('/api/reports/export/customer-debts/pdf',`bob-juice-customer-debts-${new Date().toISOString().slice(0,10)}.pdf`);toast('Customer debts PDF downloaded');}catch(e){toast(e.message);}};
+$('btn-export-supplier-pdf').onclick=async()=>{try{await downloadPdf('/api/reports/export/supplier-debts/pdf',`bob-juice-supplier-debts-${new Date().toISOString().slice(0,10)}.pdf`);toast('Supplier debts PDF downloaded');}catch(e){toast(e.message);}};
+$('emp-filter').onchange=()=>{S.opId=$('emp-filter').value||null;BobUI.safeLoad(loadReports,'reports');};
+$('branch-filter').onchange=()=>{S.branchId=$('branch-filter').value||null;BobUI.safeLoad(loadReports,'reports');if(S.tab==='inventory')BobUI.safeLoad(loadInventory,'inventory');if(S.tab==='expenses')BobUI.safeLoad(loadExpenses,'expenses');};
+$('expense-form').onsubmit=async e=>{
+  e.preventDefault();
+  const btn=e.target.querySelector('[type=submit]');
+  const fd=new FormData(e.target);
+  const desc=(fd.get('description')||'').toString().trim();
+  const amount=+fd.get('amount_usd');
+  if(!desc){toast('Description is required');return;}
+  if(!Number.isFinite(amount)||amount<=0){toast('Enter a valid amount');return;}
+  await BobUI.withBusy(btn,async()=>{
+    try{
+      await API.addExpense({description:desc,category:fd.get('category'),amount_usd:amount,expense_date:fd.get('expense_date'),notes:fd.get('notes')||null,branch_id:S.branchId||undefined});
+      toast('Saved');e.target.reset();await loadExpenses();
+    }catch(err){BobUI.toastErr(err);}
+  });
+};
+document.querySelector('[name=amount_usd]')?.addEventListener('input',e=>{$('exp-lbp-preview').textContent=e.target.value?`≈ ${fmtLbp(+e.target.value*S.rate)} LBP`:'';});
+$('btn-sync-time')?.addEventListener('click',async()=>{
+  const btn=$('btn-sync-time');
+  await BobUI.withBusy(btn,async()=>{
+    try{
+      const res=await API.syncTime();
+      toast(res.message||'Time synchronized');
+      await loadSettingsPanel();
+      if(S.tab==='reports')await BobUI.safeLoad(loadReports,'reports');
+    }catch(err){BobUI.toastErr(err);}
+  });
+});
+$('btn-add-branch')?.addEventListener('click',openBranchAdd);
+$('branch-edit-cancel')?.addEventListener('click',()=>$('branch-edit-modal').classList.add('hidden'));
+$('branch-edit-form')?.addEventListener('submit',async e=>{
+  e.preventDefault();
+  const submitBtn=e.target.querySelector('[type=submit]');
+  const id=$('branch-edit-id').value;
+  const name=$('branch-edit-name').value.trim();
+  if(!name){toast('Branch name is required');return;}
+  const payload={
+    name,
+    location:$('branch-edit-location').value.trim()||null,
+    address:$('branch-edit-address').value.trim()||null,
+    phone:$('branch-edit-phone').value.trim()||null,
+  };
+  const code=$('branch-edit-code').value.trim();
+  if(code)payload.code=code;
+  await BobUI.withBusy(submitBtn,async()=>{
+    try{
+      if(id){
+        payload.is_active=$('branch-edit-active').value==='true';
+        await API.updateBranch(+id,payload);
+        toast('Branch updated');
+      }else{
+        await API.createBranch(payload);
+        toast('Branch added');
+      }
+      $('branch-edit-modal').classList.add('hidden');
+      await loadSettingsBranchesCache();
+      await refreshBranchFilter();
+      if(S.tab==='settings')await loadSettingsPanel();
+    }catch(err){BobUI.toastErr(err);}
+  });
+});
+$('create-user-form').onsubmit=async e=>{e.preventDefault();const fd=new FormData(e.target);try{await API.createUser({username:fd.get('username').trim().toLowerCase(),password:fd.get('password'),full_name:fd.get('full_name'),role:fd.get('role'),permissions:readPerms('cp_')});toast('Created');e.target.reset();permCheckboxes($('create-perms'),'cp_',{});loadUsers();}catch(err){toast(err.message);}};
+$('edit-cancel').onclick=()=>$('edit-modal').classList.add('hidden');
+$('edit-form').onsubmit=async e=>{e.preventDefault();const payload={full_name:$('edit-name').value,role:$('edit-role').value,is_active:$('edit-active').value==='true',permissions:readPerms('ep_')};if($('edit-pw').value)payload.new_password=$('edit-pw').value;try{await API.updateUser(+$('edit-id').value,payload);toast('Updated');$('edit-modal').classList.add('hidden');loadUsers();}catch(err){toast(err.message);}};
+$('cat-edit-cancel').onclick=()=>$('cat-edit-modal').classList.add('hidden');
+$('cat-edit-form').onsubmit=async e=>{e.preventDefault();try{await API.patchCat(+$('cat-edit-id').value,{name:$('cat-edit-name').value.trim(),sort_order:+$('cat-edit-order').value});toast('Category updated');$('cat-edit-modal').classList.add('hidden');loadCatalog();}catch(err){toast(err.message);}};
+function syncProdAddPriceMode(){
+  const multi=$('prod-sizes-enabled')?.checked;
+  $('prod-single-price-wrap')?.classList.toggle('hidden',!!multi);
+  $('prod-multi-price-wrap')?.classList.toggle('hidden',!multi);
+  const base=$('prod-unit-price');
+  if(base)base.required=!multi;
+  ['prod-price-s','prod-price-m','prod-price-l'].forEach(id=>{const el=$(id);if(el)el.required=!!multi;});
+}
+function syncProdEditPriceMode(){
+  const multi=$('prod-edit-sizes-enabled')?.checked;
+  $('prod-edit-single-wrap')?.classList.toggle('hidden',!!multi);
+  $('prod-edit-multi-wrap')?.classList.toggle('hidden',!multi);
+  const base=$('prod-edit-price');
+  if(base)base.required=!multi;
+  ['prod-edit-price-s','prod-edit-price-m','prod-edit-price-l'].forEach(id=>{const el=$(id);if(el)el.required=!!multi;});
+}
+function buildProdPayloadFromAddForm(){
+  const multi=$('prod-sizes-enabled')?.checked;
+  const body={name:$('prod-form').name.value.trim(),category_id:+$('prod-cat').value,sizes_enabled:!!multi};
+  if(multi){
+    body.price_s=+$('prod-price-s').value;body.price_m=+$('prod-price-m').value;body.price_l=+$('prod-price-l').value;
+    body.unit_price=body.price_m;
+  }else{
+    body.unit_price=+$('prod-unit-price').value;
+  }
+  return body;
+}
+function buildProdPayloadFromEditForm(){
+  const multi=$('prod-edit-sizes-enabled')?.checked;
+  const body={name:$('prod-edit-name').value.trim(),category_id:+$('prod-edit-cat').value,sizes_enabled:!!multi};
+  if(multi){
+    body.price_s=+$('prod-edit-price-s').value;body.price_m=+$('prod-edit-price-m').value;body.price_l=+$('prod-edit-price-l').value;
+    body.unit_price=body.price_m;
+  }else{
+    body.unit_price=+$('prod-edit-price').value;
+    body.price_s=null;body.price_m=null;body.price_l=null;
+  }
+  return body;
+}
+$('prod-sizes-enabled')?.addEventListener('change',syncProdAddPriceMode);
+$('prod-edit-sizes-enabled')?.addEventListener('change',syncProdEditPriceMode);
+syncProdAddPriceMode();
+$('prod-edit-cancel').onclick=()=>$('prod-edit-modal').classList.add('hidden');
+$('prod-edit-form').onsubmit=async e=>{e.preventDefault();try{await API.patchProd(+$('prod-edit-id').value,buildProdPayloadFromEditForm());toast('Product updated');$('prod-edit-modal').classList.add('hidden');loadCatalog();}catch(err){toast(err.message);}};
+$('prod-form').onsubmit=async e=>{e.preventDefault();try{await API.addProd(buildProdPayloadFromAddForm());e.target.reset();syncProdAddPriceMode();toast('Product added');loadCatalog();}catch(err){toast(err.message);}};
+$('cat-form').onsubmit=async e=>{e.preventDefault();try{await API.addCat({name:$('cat-name').value.trim(),sort_order:0});$('cat-name').value='';toast('Category added');loadCatalog();}catch(err){toast(err.message);}};
+$('stock-in-unified-form').onsubmit=submitUnifiedStockIn;
+$('stock-out-form').onsubmit=async e=>{e.preventDefault();try{const payload={inventory_item_name:$('so-item').value.trim(),quantity:+$('so-qty').value,notes:$('so-notes').value||null};const u=$('so-unit').value.trim();if(u)payload.unit=u;await API.stockOut(payload);toast('Stock removed');e.target.reset();$('so-unit').value='';loadInventory();}catch(err){toast(err.message);}};
+$('so-item')?.addEventListener('input',syncStockOutUnit);
+$('customer-form').onsubmit=async e=>{e.preventDefault();const fd=new FormData(e.target);try{await API.addCustomer({name:fd.get('name'),contact_phone:fd.get('contact_phone')||null});toast('Customer added');e.target.reset();loadCustomers();}catch(err){toast(err.message);}};
+$('customer-debt-form').onsubmit=async e=>{e.preventDefault();const fd=new FormData(e.target);const name=$('debt-customer-input').value.trim();const match=(S.customers||[]).find(c=>c.name.toLowerCase()===name.toLowerCase());const payload={description:fd.get('description'),amount_usd:+fd.get('amount_usd')};const ref=(fd.get('reference_number')||'').trim();if(ref)payload.reference_number=ref;if(match)payload.customer_id=match.id;else payload.customer_name=name;try{await API.addCustomerDebt(payload);toast('Bill recorded');e.target.reset();await loadCustomers();const picked=match||(S.customers||[]).find(c=>c.name.toLowerCase()===name.toLowerCase());if(picked){$('customer-filter').value=String(picked.id);await loadCustomerBills(picked.id);}}catch(err){toast(err.message);}};
+$('supplier-form').onsubmit=async e=>{e.preventDefault();const fd=new FormData(e.target);try{await API.addSupplier({name:fd.get('name'),category:fd.get('category'),contact_phone:fd.get('contact_phone')||null});toast('Supplier added');e.target.reset();loadSuppliers();}catch(err){toast(err.message);}};
+$('debt-supplier-input')?.addEventListener('input',e=>{const m=(S.suppliers||[]).find(s=>s.name.toLowerCase()===e.target.value.trim().toLowerCase());if(m)$('debt-supplier-cat').value=m.category;});
+$('supplier-debt-form').onsubmit=async e=>{e.preventDefault();const fd=new FormData(e.target);const name=$('debt-supplier-input').value.trim();const match=(S.suppliers||[]).find(s=>s.name.toLowerCase()===name.toLowerCase());const payload={description:fd.get('description'),amount_usd:+fd.get('amount_usd')};const ref=(fd.get('reference_number')||'').trim();if(ref)payload.reference_number=ref;if(match){payload.supplier_id=match.id;}else{payload.supplier_name=name;payload.supplier_category=$('debt-supplier-cat').value.trim()||'General';}try{const created=await API.addDebt(payload);toast('Bill recorded');e.target.reset();await loadSuppliers();const picked=match||(S.suppliers||[]).find(s=>s.name.toLowerCase()===name.toLowerCase());if(picked){$('supplier-filter').value=String(picked.id);await loadSupplierBills(picked.id);if(picked.contact_phone)openWhatsApp(picked.contact_phone,supplierRegisterWaText(picked.name,created));}}catch(err){toast(err.message);}};
+$('entity-edit-cancel').onclick=()=>$('entity-edit-modal').classList.add('hidden');
+$('entity-edit-form').onsubmit=async e=>{e.preventDefault();const type=$('entity-edit-type').value;const id=+$('entity-edit-id').value;const payload={name:$('entity-edit-name').value.trim(),contact_phone:$('entity-edit-phone').value.trim()||null};if(type==='supplier')payload.category=$('entity-edit-category').value.trim();try{if(type==='customer')await API.patchCustomer(id,payload);else await API.patchSupplier(id,payload);toast('Profile updated');$('entity-edit-modal').classList.add('hidden');if(type==='customer'){await loadCustomers();if($('customer-filter').value)await loadCustomerBills(+$('customer-filter').value);}else{await loadSuppliers();if($('supplier-filter').value)await loadSupplierBills(+$('supplier-filter').value);}}catch(err){toast(err.message);}};
+$('bill-edit-cancel').onclick=()=>$('bill-edit-modal').classList.add('hidden');
+$('bill-edit-form').onsubmit=async e=>{e.preventDefault();const type=$('bill-edit-type').value;const id=+$('bill-edit-id').value;const payload={description:$('bill-edit-desc').value.trim(),amount_usd:+$('bill-edit-amount').value,reference_number:($('bill-edit-ref').value||'').trim()||null};const due=$('bill-edit-due').value;if(due)payload.due_date=due;try{if(type==='customer')await API.patchCustomerDebt(id,payload);else await API.patchDebt(id,payload);toast('Bill updated');$('bill-edit-modal').classList.add('hidden');if(type==='customer'){await loadCustomers();if($('customer-filter').value)await loadCustomerBills(+$('customer-filter').value,$('customer-invoice-search')?.value||'');}else{await loadSuppliers();if($('supplier-filter').value)await loadSupplierBills(+$('supplier-filter').value,$('supplier-invoice-search')?.value||'');}}catch(err){toast(err.message);}};
+$('customer-invoice-search')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();searchCustomerInvoice(e.target.value);}});
+$('customer-invoice-search')?.addEventListener('input',e=>{if(!e.target.value.trim()&&$('customer-filter').value)loadCustomerBills(+$('customer-filter').value);});
+$('supplier-invoice-search')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();searchSupplierInvoice(e.target.value);}});
+$('supplier-invoice-search')?.addEventListener('input',e=>{if(!e.target.value.trim()&&$('supplier-filter').value)loadSupplierBills(+$('supplier-filter').value);});
+$('customer-filter').onchange=async()=>{const id=+$('customer-filter').value;if(id)await loadCustomerBills(id,$('customer-invoice-search')?.value||'');else{$('customer-bills-wrap').classList.add('hidden');$('customer-debt-table').innerHTML='';}};
+$('supplier-filter').onchange=async()=>{const id=+$('supplier-filter').value;if(id)await loadSupplierBills(id,$('supplier-invoice-search')?.value||'');else{$('supplier-bills-wrap').classList.add('hidden');$('supplier-debt-table').innerHTML='';}};
+$('txn-date-mode').onchange=()=>{syncTxnDateMode();loadTransactions();};
+$('txn-apply').onclick=()=>loadTransactions();
+$('txn-clear').onclick=()=>{$('txn-search').value='';$('txn-date-mode').value='all';$('txn-date-day').value='';$('txn-date-from').value='';$('txn-date-to').value='';syncTxnDateMode();loadTransactions();};
+$('txn-search').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();loadTransactions();}});
+['txn-date-day','txn-date-from','txn-date-to'].forEach(id=>$(id)?.addEventListener('change',()=>{if($('txn-date-mode').value!=='all')loadTransactions();}));
+$('txn-modal-close').onclick=()=>$('txn-receipt-modal').classList.add('hidden');
+$('txn-modal-reprint').onclick=async()=>{if(!S._activeTxn)return;try{await API.printThermal(S._activeTxn.invoice_id);toast('Sent to thermal printer');}catch(e){toast(e.message||'Print failed');}};
+$('txn-modal-pdf').onclick=async()=>{if(!S._activeTxn)return;try{await downloadPdf(`/api/sales/orders/${S._activeTxn.invoice_id}/receipt/pdf`,`bob-juice-receipt-${S._activeTxn.sale_number}.pdf`);toast('PDF downloaded');}catch(e){toast(e.message);}};
+$('txn-modal-wa').onclick=()=>{if(S._activeTxn)openWhatsApp('',saleWaText(S._activeTxn));};
+(async()=>{
+  try{await boot();}
+  catch(e){
+    if(String(e?.message||'').includes('Access Denied'))$('access-denied').classList.remove('hidden');
+    else goLogin();
+  }
+})();
+</script>
+</body>
+</html>

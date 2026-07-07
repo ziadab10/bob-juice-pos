@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BOB JUICE — Admin Portal</title>
+  <link rel="stylesheet" href="/static/app.css" />
+  <script src="/static/bob-auth.js"></script>
+  <script src="/static/bob-tab-session.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100vh; height: 100%; overflow: hidden; }
+    body.admin-portal {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      background: radial-gradient(ellipse at 20% 0%, rgba(249, 115, 22, 0.15) 0%, transparent 50%),
+                  radial-gradient(ellipse at 80% 100%, rgba(250, 204, 21, 0.08) 0%, transparent 45%),
+                  #0d0d0d;
+      font-family: var(--font, Inter, system-ui, sans-serif);
+    }
+    .portal-shell { width: 100%; max-width: 440px; padding: 1.5rem; }
+    .portal-card {
+      background: rgba(26, 26, 26, 0.95); border: 1px solid #333; border-radius: 16px;
+      padding: 2.5rem 2rem; box-shadow: 0 24px 64px rgba(0,0,0,.55);
+      backdrop-filter: blur(12px);
+    }
+    .portal-title { text-align: center; font-size: 1.75rem; font-weight: 800; color: #f5f5f5; margin: 0 0 .35rem; letter-spacing: -.02em; }
+    .portal-sub { text-align: center; color: #a3a3a3; font-size: .875rem; margin: 0 0 1.5rem; line-height: 1.5; }
+    .portal-badge {
+      display: flex; align-items: center; justify-content: center; gap: .5rem;
+      font-size: .6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em;
+      color: #facc15; margin-bottom: 1.5rem; padding: .5rem; background: rgba(250,204,21,.08); border-radius: 8px;
+    }
+    .portal-footer { text-align: center; margin-top: 1.5rem; }
+    .portal-footer a { color: #737373; font-size: .8125rem; text-decoration: none; }
+    .portal-footer a:hover { color: #f97316; }
+    .portal-divider { height: 1px; background: #333; margin: 1.5rem 0; }
+    .input-group label { color: #a3a3a3; }
+    .input { background: #242424; border-color: #404040; color: #f5f5f5; }
+  </style>
+</head>
+<body class="admin-portal">
+  <div class="portal-shell">
+    <div class="portal-card">
+      <div class="portal-logo-wrap"><img src="/static/logo_circular.png" alt="BOB JUICE" class="portal-logo brand-logo brand-logo--login" style="border-radius:50%!important;object-fit:cover!important;width:108px!important;height:108px!important;border:2px solid #334e4e!important;display:block;margin:0 auto;" /></div>
+      <h1 class="portal-title">Admin Portal</h1>
+      <p class="portal-sub">Independent management portal — sign in to access reports, inventory, catalog, and settings.</p>
+      <div class="portal-badge"><span>🔒</span> Secure Admin Authentication</div>
+      <div id="admin-login-panel" autocomplete="off">
+        <input type="text" style="display:none" tabindex="-1" aria-hidden="true" autocomplete="off" />
+        <input type="password" style="display:none" tabindex="-1" aria-hidden="true" autocomplete="new-password" />
+        <div class="input-group"><label>Username</label><input id="admin-user" type="text" class="input" name="bob_admin_gate_user" autocomplete="new-password" autocapitalize="off" spellcheck="false" readonly onfocus="this.removeAttribute('readonly')" autofocus /></div>
+        <div class="input-group"><label>Password</label><input id="admin-pass" type="password" class="input" name="bob_admin_gate_secret" autocomplete="new-password" readonly onfocus="this.removeAttribute('readonly')" /></div>
+        <button type="button" id="admin-login-btn" class="btn btn-primary btn-lg" style="width:100%;margin-top:.5rem">Sign In to Dashboard</button>
+      </div>
+      <div class="portal-divider"></div>
+      <div class="portal-footer">
+        <a href="/">← Return to Cashier POS (separate session)</a>
+      </div>
+    </div>
+  </div>
+  <div id="toast" class="toast hidden"></div>
+  <script>
+    const Auth = BobAuth.create('admin');
+    const $ = id => document.getElementById(id);
+    function toast(m){$('toast').textContent=m;$('toast').classList.remove('hidden');setTimeout(()=>$('toast').classList.add('hidden'),3000);}
+
+    (async () => {
+      const r = await Auth.restore();
+      if (!r.ok) return;
+      try {
+        const perms = await Auth.req('/api/users/permissions');
+        if (perms.permissions?.admin_dashboard) location.replace('/admin/dashboard');
+      } catch (_) {
+        await Auth.logout();
+      }
+    })();
+
+    async function doAdminLogin() {
+      const u = $('admin-user').value.trim();
+      const p = $('admin-pass').value;
+      if (!u || !p) { toast('Enter username and password'); return; }
+      const b = new FormData();
+      b.append('username', u);
+      b.append('password', p);
+      try {
+        const d = await Auth.req('/api/auth/login', { method: 'POST', body: b, headers: { 'X-Bob-Portal': 'admin' } });
+        const perms = await Auth.req('/api/users/permissions');
+        if (!perms.permissions?.admin_dashboard) throw new Error('This account does not have admin dashboard access');
+        localStorage.setItem('bob_admin_token', d.access_token);
+        localStorage.setItem('bob_admin_user', JSON.stringify({ id: d.user_id, full_name: d.full_name, username: d.username, role: d.role }));
+        location.href = '/admin/dashboard';
+      } catch (err) {
+        toast(err.message === 'session_expired' ? 'Session expired — please sign in again' : err.message);
+      }
+    }
+    $('admin-login-btn').onclick = doAdminLogin;
+    ['admin-user', 'admin-pass'].forEach(id => {
+      $(id).addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); doAdminLogin(); } });
+    });
+  </script>
+</body>
+</html>

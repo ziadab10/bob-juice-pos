@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BOB JUICE — Stock In</title>
+  <link rel="stylesheet" href="/static/app.css" />
+  <script src="/static/bob-auth.js"></script>
+  <script src="/static/bob-tab-session.js"></script>
+</head>
+<body>
+<div id="app" style="min-height:100vh;padding:1.25rem;max-width:900px;margin:0 auto">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:.75rem">
+    <h1 style="margin:0;font-weight:800">Stock In — شو فوتت بضاعة</h1>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+      <a href="/admin/dashboard" class="btn btn-secondary btn-sm">← Admin</a>
+      <a href="/stock-out" class="btn btn-ghost btn-sm">Stock Out</a>
+      <a href="/inventory-intake" class="btn btn-ghost btn-sm">Inventory Intake</a>
+    </div>
+  </div>
+  <div class="card" style="padding:1.25rem;margin-bottom:1rem">
+    <form id="stock-in-form" class="form-grid">
+      <div class="input-group span-2"><label>Item name</label><input id="si-item" class="input" list="inv-item-list" placeholder="Type or select inventory item…" required autocomplete="off" /></div>
+      <div class="input-group"><label>Quantity</label><input id="si-qty" type="number" step="0.001" min="0.001" class="input" required /></div>
+      <div class="input-group"><label>Unit</label><input id="si-unit" class="input" placeholder="kg, L, pcs…" /></div>
+      <div class="input-group span-2"><label>Notes</label><input id="si-notes" class="input" placeholder="Delivery, purchase…" /></div>
+      <div class="span-2"><button class="btn btn-primary">Record Incoming</button></div>
+    </form>
+  </div>
+  <div class="card" style="padding:1.25rem">
+    <h3 style="margin:0 0 .75rem;font-weight:700">Current Stock Levels</h3>
+    <table class="data"><thead><tr><th>Name</th><th>Unit</th><th style="text-align:right">On Hand</th><th style="text-align:right">Reorder</th></tr></thead><tbody id="inv-stock-table"></tbody></table>
+  </div>
+  <datalist id="inv-item-list"></datalist>
+</div>
+<div id="toast" class="toast hidden"></div>
+<script>
+(function(){document.documentElement.setAttribute('data-theme',localStorage.getItem('bob_theme')||'dark');})();
+const Auth=BobAuth.create('admin');
+const $=id=>document.getElementById(id);
+const toast=m=>{$('toast').textContent=m;$('toast').classList.remove('hidden');setTimeout(()=>$('toast').classList.add('hidden'),3000);};
+async function boot(){
+  if(!(await Auth.restore()).ok){location.href='/login?portal=admin';return;}
+  const items=await Auth.req('/api/inventory/items');
+  $('inv-item-list').innerHTML=items.map(i=>`<option value="${i.name}"></option>`).join('');
+  $('inv-stock-table').innerHTML=items.map(i=>`<tr><td style="font-weight:600">${i.name}</td><td>${i.unit}</td><td style="text-align:right;font-weight:700">${i.current_stock}</td><td style="text-align:right">${i.reorder_level}</td></tr>`).join('')||'<tr><td colspan="4">No inventory items yet</td></tr>';
+}
+$('stock-in-form').onsubmit=async e=>{e.preventDefault();try{await Auth.req('/api/inventory/stock-in',{method:'POST',body:JSON.stringify({inventory_item_name:$('si-item').value.trim(),quantity:+$('si-qty').value,unit:($('si-unit').value||'pcs').trim(),notes:$('si-notes').value||null})});toast('Stock received');e.target.reset();boot();}catch(err){toast(err.message);}};
+boot().catch(()=>location.href='/login?portal=admin');
+</script>
+</body>
+</html>

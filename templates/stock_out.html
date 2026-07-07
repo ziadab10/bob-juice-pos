@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BOB JUICE — Stock Out</title>
+  <link rel="stylesheet" href="/static/app.css" />
+  <script src="/static/bob-auth.js"></script>
+  <script src="/static/bob-tab-session.js"></script>
+</head>
+<body>
+<div id="app" style="min-height:100vh;padding:1.25rem;max-width:900px;margin:0 auto">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:.75rem">
+    <h1 style="margin:0;font-weight:800">Stock Out — شو ضهرت بضاعة</h1>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+      <a href="/admin/dashboard" class="btn btn-secondary btn-sm">← Admin</a>
+      <a href="/stock-in" class="btn btn-ghost btn-sm">Stock In</a>
+      <a href="/inventory-intake" class="btn btn-ghost btn-sm">Inventory Intake</a>
+    </div>
+  </div>
+  <div class="card" style="padding:1.25rem;margin-bottom:1rem">
+    <form id="stock-out-form" class="form-grid">
+      <div class="input-group span-2"><label>Item name</label><input id="so-item" class="input" list="inv-item-list" placeholder="Exact item name…" required autocomplete="off" /></div>
+      <div class="input-group"><label>Quantity</label><input id="so-qty" type="number" step="0.001" min="0.001" class="input" required /></div>
+      <div class="input-group"><label>Unit</label><input id="so-unit" class="input" readonly /></div>
+      <div class="input-group span-2"><label>Notes</label><input id="so-notes" class="input" placeholder="Waste, spoilage…" /></div>
+      <div class="span-2"><button class="btn btn-danger">Record Outgoing</button></div>
+    </form>
+  </div>
+  <div class="card" style="padding:1.25rem">
+    <h3 style="margin:0 0 .75rem;font-weight:700">Stock Out History</h3>
+    <table class="data"><thead><tr><th>Time</th><th>Item</th><th>Qty</th><th>Balance</th><th>Notes</th></tr></thead><tbody id="ledger-table"></tbody></table>
+  </div>
+  <datalist id="inv-item-list"></datalist>
+</div>
+<div id="toast" class="toast hidden"></div>
+<script>
+(function(){document.documentElement.setAttribute('data-theme',localStorage.getItem('bob_theme')||'dark');})();
+const Auth=BobAuth.create('admin');
+let invItems=[];
+const $=id=>document.getElementById(id);
+const toast=m=>{$('toast').textContent=m;$('toast').classList.remove('hidden');setTimeout(()=>$('toast').classList.add('hidden'),3000);};
+function syncUnit(){const m=invItems.find(i=>i.name.toLowerCase()===$('so-item').value.trim().toLowerCase());$('so-unit').value=m?m.unit:'';$('so-unit').readOnly=!!m;}
+async function boot(){
+  if(!(await Auth.restore()).ok){location.href='/login?portal=admin';return;}
+  const[items,ledger]=await Promise.all([Auth.req('/api/inventory/items'),Auth.req('/api/inventory/ledger')]);
+  invItems=items;
+  $('inv-item-list').innerHTML=items.map(i=>`<option value="${i.name}"></option>`).join('');
+  $('ledger-table').innerHTML=ledger.filter(m=>m.movement_type==='out').map(m=>`<tr><td style="white-space:nowrap">${new Date(m.created_at).toLocaleString()}</td><td>${m.inventory_name}</td><td>${m.quantity}</td><td>${m.balance_after}</td><td>${m.notes||m.reference||'—'}</td></tr>`).join('')||'<tr><td colspan="5">No stock out records</td></tr>';
+}
+$('so-item').addEventListener('input',syncUnit);
+$('stock-out-form').onsubmit=async e=>{e.preventDefault();try{const payload={inventory_item_name:$('so-item').value.trim(),quantity:+$('so-qty').value,notes:$('so-notes').value||null};const u=$('so-unit').value.trim();if(u)payload.unit=u;await Auth.req('/api/inventory/stock-out',{method:'POST',body:JSON.stringify(payload)});toast('Stock removed');e.target.reset();$('so-unit').value='';boot();}catch(err){toast(err.message);}};
+boot().catch(()=>location.href='/login?portal=admin');
+</script>
+</body>
+</html>

@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BOB JUICE — Supplier Debts</title>
+  <link rel="stylesheet" href="/static/app.css" />
+  <script src="/static/bob-auth.js"></script>
+  <script src="/static/bob-tab-session.js"></script>
+</head>
+<body>
+<div id="app" style="min-height:100vh;padding:1.25rem;max-width:1000px;margin:0 auto">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:.75rem">
+    <h1 style="margin:0;font-weight:800">Supplier Debts</h1>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+      <a href="/admin/dashboard" class="btn btn-secondary btn-sm">← Admin</a>
+      <a href="/customer-debts" class="btn btn-ghost btn-sm">Customer Debts</a>
+      <a href="/inventory-intake" class="btn btn-ghost btn-sm">Inventory Intake</a>
+    </div>
+  </div>
+  <div class="card" style="padding:1.25rem;margin-bottom:1rem">
+    <div class="input-group" style="max-width:420px;margin:0">
+      <label for="supplier-filter">Select Supplier</label>
+      <select id="supplier-filter" class="select">
+        <option value="">— Choose a supplier —</option>
+      </select>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem">
+    <div class="card" style="padding:1.25rem">
+      <h3 style="margin:0 0 .75rem;font-weight:700">Add Supplier</h3>
+      <form id="supplier-form">
+        <div class="input-group"><label>Name</label><input name="name" class="input" required /></div>
+        <div class="input-group"><label>Category</label><input name="category" class="input" required /></div>
+        <div class="input-group"><label>Phone</label><input name="contact_phone" class="input" /></div>
+        <button class="btn btn-primary">Add Supplier</button>
+      </form>
+    </div>
+    <div class="card" style="padding:1.25rem">
+      <h3 style="margin:0 0 .75rem;font-weight:700">Record Invoice / Bill</h3>
+      <form id="debt-form">
+        <div class="input-group"><label>Supplier</label><input id="debt-supplier-input" class="input" list="supplier-list" placeholder="Select or type supplier…" required autocomplete="off" /></div>
+        <div class="input-group"><label>Supplier Category</label><input id="debt-supplier-cat" class="input" placeholder="Auto or custom category" /></div>
+        <div class="input-group"><label>Description</label><input name="description" class="input" required /></div>
+        <div class="input-group"><label>Amount USD</label><input name="amount_usd" type="number" step="0.01" min="0.01" class="input" required /></div>
+        <div class="input-group"><label>Payment Status</label><select name="is_paid" class="select"><option value="false">Unpaid</option><option value="true">Paid</option></select></div>
+        <button class="btn btn-primary">Record Bill</button>
+      </form>
+    </div>
+  </div>
+  <datalist id="supplier-list"></datalist>
+  <div id="supplier-bills-wrap" class="hidden">
+    <div class="card" style="padding:1.25rem;margin-bottom:1rem">
+      <div id="supplier-summary"></div>
+    </div>
+    <div class="card" style="padding:1.25rem">
+      <h3 style="margin:0 0 .75rem;font-weight:700">Invoices &amp; Bills</h3>
+      <table class="data"><thead><tr><th>Invoice #</th><th>Date</th><th>Description</th><th style="text-align:right">Amount</th><th>Status</th><th>Actions</th></tr></thead><tbody id="debt-table"></tbody></table>
+    </div>
+  </div>
+</div>
+<div id="toast" class="toast hidden"></div>
+<script>
+(function(){document.documentElement.setAttribute('data-theme',localStorage.getItem('bob_theme')||'dark');})();
+const Auth=BobAuth.create('admin');
+let suppliers=[];
+const $=id=>document.getElementById(id);
+const fmt=n=>Number(n).toFixed(2);
+const fmtLbp=n=>Math.round(Number(n)).toLocaleString();
+const toast=m=>{$('toast').textContent=m;$('toast').classList.remove('hidden');setTimeout(()=>$('toast').classList.add('hidden'),3000);};
+async function downloadPdf(url,filename){
+  const token=localStorage.getItem('bob_admin_token');
+  const res=await fetch(url,{credentials:'include',headers:{Authorization:`Bearer ${token}`,'X-Bob-Portal':'admin'}});
+  if(!res.ok){const err=await res.json().catch(()=>({detail:'Export failed'}));throw new Error(typeof err.detail==='string'?err.detail:'Export failed');}
+  const blob=await res.blob();const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=filename;a.click();
+}
+function waDigits(phone){return phone?String(phone).replace(/\D/g,''):'';}
+function waUrl(phone,text){const q=encodeURIComponent(text);const p=waDigits(phone);return p?`https://wa.me/${p}?text=${q}`:`https://wa.me/?text=${q}`;}
+function supplierWaText(invId,amount,paid){
+  if(paid)return `مرحباً\nتفيدكم إدارة BOB JUICE بأن الفاتورة الخاصة بكم رقم ${invId} بقيمة ${amount} USD قد تم سدادها بالكامل بنجاح. شكراً لكم وتعاملنا مستمر! 🤝`;
+  return `مرحباً\nتفيدكم إدارة BOB JUICE بأن الفاتورة الخاصة بكم رقم ${invId} بقيمة ${amount} USD مسجلة حالياً كغير مدفوعة، وسيتم جدولتها قريباً جداً. شكراً لكم! 👍`;
+}
+function billPaid(debt){return !!(debt.is_paid||debt.is_settled||debt.payment_status==='Paid');}
+function statusBadge(debt){return billPaid(debt)?'<span class="badge badge-success">Paid</span>':'<span class="badge badge-accent">Unpaid</span>';}
+function renderBillRow(debt,supplier){
+  const paid=billPaid(debt);
+  const waBtn=`<a href="${waUrl(supplier.contact_phone,supplierWaText(debt.id,fmt(debt.amount_usd),paid))}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm">WhatsApp</a>`;
+  return `<tr><td>#${debt.id}</td><td>${new Date(debt.created_at).toLocaleDateString()}</td><td>${debt.description}</td><td style="text-align:right">$${fmt(debt.amount_usd)}</td><td>${statusBadge(debt)}</td><td style="white-space:nowrap;display:flex;gap:.35rem;flex-wrap:wrap"><button type="button" class="btn btn-secondary btn-sm btn-bill-pdf" data-id="${debt.id}">PDF</button>${waBtn}</td></tr>`;
+}
+async function loadSupplierList(){
+  suppliers=await Auth.req('/api/finance/suppliers');
+  $('supplier-list').innerHTML=suppliers.map(s=>`<option value="${s.name}" data-cat="${s.category}"></option>`).join('');
+  const sel=$('supplier-filter');
+  const prev=sel.value;
+  sel.innerHTML='<option value="">— Choose a supplier —</option>'+suppliers.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+  if(prev&&suppliers.some(s=>String(s.id)===prev))sel.value=prev;
+  if(sel.value)await loadSupplierBills(+sel.value);
+  else{$('supplier-bills-wrap').classList.add('hidden');$('debt-table').innerHTML='';}
+}
+async function loadSupplierBills(supplierId){
+  const supplier=suppliers.find(s=>s.id===supplierId);
+  if(!supplier){$('supplier-bills-wrap').classList.add('hidden');return;}
+  const debts=await Auth.req(`/api/finance/suppliers/${supplierId}/debts`);
+  $('supplier-summary').innerHTML=`<div style="display:flex;flex-wrap:wrap;gap:1rem 2rem;align-items:baseline"><div><span style="opacity:.7;font-size:.8125rem">Category</span><div>${supplier.category}</div></div><div><span style="opacity:.7;font-size:.8125rem">Name</span><div style="font-weight:800;font-size:1.1rem">${supplier.name}</div></div><div><span style="opacity:.7;font-size:.8125rem">Phone</span><div>${supplier.contact_phone||'—'}</div></div><div><span style="opacity:.7;font-size:.8125rem">Outstanding Balance</span><div style="font-weight:700">$${fmt(supplier.balance_usd)} · ${fmtLbp(supplier.balance_lbp)} LBP</div></div></div>`;
+  $('debt-table').innerHTML=debts.length?debts.map(d=>renderBillRow(d,supplier)).join(''):'<tr><td colspan="6">No invoices for this supplier</td></tr>';
+  $('supplier-bills-wrap').classList.remove('hidden');
+  document.querySelectorAll('.btn-bill-pdf').forEach(b=>b.onclick=async()=>{try{await downloadPdf(`/api/reports/export/supplier-debt/${b.dataset.id}/pdf`,`bob-juice-supplier-bill-${b.dataset.id}.pdf`);toast('PDF downloaded');}catch(e){toast(e.message);}});
+}
+async function boot(){
+  if(!(await Auth.restore()).ok){location.href='/login?portal=admin';return;}
+  await loadSupplierList();
+}
+$('supplier-filter').onchange=async()=>{const id=+$('supplier-filter').value;if(id)await loadSupplierBills(id);else{$('supplier-bills-wrap').classList.add('hidden');$('debt-table').innerHTML='';}};
+$('debt-supplier-input')?.addEventListener('input',e=>{const m=suppliers.find(s=>s.name.toLowerCase()===e.target.value.trim().toLowerCase());if(m)$('debt-supplier-cat').value=m.category;});
+$('supplier-form').onsubmit=async e=>{e.preventDefault();const fd=new FormData(e.target);try{await Auth.req('/api/finance/suppliers',{method:'POST',body:JSON.stringify({name:fd.get('name'),category:fd.get('category'),contact_phone:fd.get('contact_phone')||null})});toast('Supplier added');e.target.reset();await loadSupplierList();}catch(err){toast(err.message);}};
+$('debt-form').onsubmit=async e=>{e.preventDefault();const fd=new FormData(e.target);const name=$('debt-supplier-input').value.trim();const match=suppliers.find(s=>s.name.toLowerCase()===name.toLowerCase());const payload={description:fd.get('description'),amount_usd:+fd.get('amount_usd'),is_paid:fd.get('is_paid')==='true'};if(match){payload.supplier_id=match.id;}else{payload.supplier_name=name;payload.supplier_category=$('debt-supplier-cat').value.trim()||'General';}try{await Auth.req('/api/finance/debts',{method:'POST',body:JSON.stringify(payload)});toast('Bill recorded');e.target.reset();await loadSupplierList();if(match){$('supplier-filter').value=String(match.id);await loadSupplierBills(match.id);}}catch(err){toast(err.message);}};
+boot().catch(()=>location.href='/login?portal=admin');
+</script>
+</body>
+</html>

@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>BOB JUICE POS</title>
+  <link rel="stylesheet" href="/static/app.css?v=20260704e" />
+  <style>
+    #pos-meta-bar{display:flex!important;flex-wrap:nowrap!important;align-items:center!important;gap:10px!important;padding:.35rem .75rem!important}
+    .pos-catalog-toolbar{display:flex!important;flex-direction:row!important;align-items:center!important;gap:10px!important;margin-bottom:12px!important;padding:.5rem .875rem 0!important;flex-shrink:0!important}
+    .pos-catalog-toolbar #search-products{flex:1 1 auto!important;min-width:0!important;width:auto!important;max-width:none!important;height:32px!important;box-sizing:border-box!important;padding:0 10px!important;font-size:.8125rem!important;font-family:inherit!important;border-radius:var(--radius)!important;border:1px solid var(--border-strong)!important;background:var(--bg-elevated)!important;color:var(--text-primary)!important}
+    .pos-catalog-toolbar #search-products:focus{border-color:var(--accent-gold)!important;outline:none!important;box-shadow:0 0 0 2px rgba(250,204,21,.12)!important}
+    .pos-catalog-toolbar-actions{display:flex!important;flex-shrink:0!important;align-items:center!important;gap:8px!important}
+    .pos-catalog-toolbar-actions .cat-pill{flex:0 0 auto!important;margin:0!important}
+    .product-card{cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+    #cat-bar{display:flex!important;flex-wrap:wrap!important;gap:8px!important;overflow:visible!important;white-space:normal!important}
+  </style>
+  <script src="/static/bob-auth.js"></script>
+  <script src="/static/bob-tab-session.js"></script>
+  <script src="/static/bob-ui-guards.js"></script>
+</head>
+<body class="pos-lock">
+
+<div id="access-denied" class="overlay hidden">
+  <div class="modal access-denied">
+    <div class="icon">🔒</div>
+    <h2 style="color:var(--danger);font-weight:800;margin:0 0 .5rem">Access Denied</h2>
+    <p style="color:var(--text-secondary);margin:0 0 1.5rem">You do not have permission to access the Admin dashboard.</p>
+    <button id="denied-ok" class="btn btn-primary btn-lg" style="width:100%">Return to POS</button>
+  </div>
+</div>
+
+<div id="shift-screen" class="overlay shift-required">
+  <div class="modal shift-modal">
+    <h2 style="font-weight:800;margin:0 0 .25rem">Open Shift — فتح الوردية</h2>
+    <p style="color:var(--text-secondary);font-size:.875rem;margin:0 0 1.25rem">Enter opening drawer cash (المبلغ الحالي في الجارور) before processing any sale.</p>
+    <form id="shift-form">
+      <div class="input-group"><label>Opening Drawer Cash USD ($)</label><input id="float-usd" type="number" step="0.01" min="0" value="" class="input" placeholder="0.00" required /></div>
+      <div class="input-group"><label>Opening Drawer Cash LBP (ل.ل)</label><input id="float-lbp" type="number" step="1" min="0" value="" class="input" placeholder="0" /></div>
+      <button type="submit" class="btn btn-primary btn-lg" style="width:100%">Start Shift &amp; Open Drawer</button>
+    </form>
+  </div>
+</div>
+
+<div id="close-screen" class="overlay hidden">
+  <div class="modal" style="max-width:480px">
+    <h2 style="font-weight:800;margin:0 0 1rem">Close Shift</h2>
+    <div id="close-preview" class="card" style="padding:1rem;margin-bottom:1rem;font-size:.875rem"></div>
+    <form id="close-form">
+      <div class="input-group"><label>Counted Cash USD</label><input id="count-usd" type="number" step="0.01" min="0" class="input" required /></div>
+      <div class="input-group"><label>Counted Cash LBP</label><input id="count-lbp" type="number" step="1" min="0" class="input" required /></div>
+      <div class="input-group"><label>Notes</label><textarea id="close-notes" class="textarea" rows="2"></textarea></div>
+      <div style="display:flex;gap:.75rem"><button type="button" id="close-cancel" class="btn btn-secondary" style="flex:1">Cancel</button><button type="submit" class="btn btn-primary" style="flex:1">Close &amp; Print</button></div>
+    </form>
+  </div>
+</div>
+
+<div id="profile-screen" class="overlay hidden">
+  <div class="modal" style="max-width:480px">
+    <h2 style="font-weight:800;margin:0 0 1rem">Profile Settings</h2>
+    <form id="prof-name-form" class="input-group"><label>Display Name</label><input id="prof-name" class="input" required /><button type="submit" class="btn btn-secondary" style="margin-top:.5rem">Save Name</button></form>
+    <form id="prof-user-form" class="input-group" style="border-top:1px solid var(--border);padding-top:1rem"><label>Username</label><input id="prof-user" class="input" required /><button type="submit" class="btn btn-secondary" style="margin-top:.5rem">Change Username</button></form>
+    <form id="prof-pw-form" style="border-top:1px solid var(--border);padding-top:1rem">
+      <div class="input-group"><label>Current Password</label><input id="pw-cur" type="password" class="input" required /></div>
+      <div class="input-group"><label>New Password</label><input id="pw-new" type="password" class="input" required minlength="8" /></div>
+      <div class="input-group"><label>Confirm Password</label><input id="pw-conf" type="password" class="input" required /></div>
+      <button type="submit" class="btn btn-primary" style="width:100%">Change Password</button>
+    </form>
+    <button id="prof-close" class="btn btn-ghost" style="width:100%;margin-top:1rem">Close</button>
+  </div>
+</div>
+
+<div id="pos-app" class="hidden" style="height:100vh;display:flex;flex-direction:column">
+  <header class="topbar">
+    <div class="topbar-brand">
+      <div class="brand-logo-wrap brand-logo-wrap--topbar"><img src="/static/logo_circular.png" alt="BOB JUICE" class="brand-logo brand-logo--topbar" style="border-radius:50%!important;object-fit:cover!important;width:60px!important;height:60px!important;border:2px solid #334e4e!important;display:block;" /></div>
+      <div><div class="topbar-title">BOB JUICE</div><div id="hdr-user" class="topbar-sub"></div></div>
+    </div>
+    <div class="topbar-actions">
+      <button id="theme-toggle" class="theme-toggle" title="Toggle light/dark mode" aria-label="Toggle theme"></button>
+      <span id="shift-badge" class="badge badge-accent"></span>
+      <button id="btn-profile" class="btn btn-secondary btn-sm" style="color:#fff;border-color:#404040;background:transparent">Profile</button>
+      <a id="btn-admin" href="/admin/dashboard" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm hidden" style="color:#fff;border-color:#404040;background:transparent;text-decoration:none">Admin</a>
+      <button id="btn-close-shift" class="btn btn-primary btn-sm">Close Shift</button>
+      <button id="btn-logout" class="btn btn-secondary btn-sm" style="color:#fff;border-color:#404040;background:transparent">Logout</button>
+    </div>
+  </header>
+  <div class="rate-bar" id="pos-meta-bar">
+    <span class="rate-bar-item">Rate: <strong id="rate-display">—</strong> LBP/USD</span>
+    <span class="rate-bar-item">Toters: <strong id="toters-display">—</strong>%</span>
+    <span id="channel-badge" class="badge badge-dark">In-Store</span>
+  </div>
+  <div class="pos-layout" style="flex:1">
+    <!-- Left: Receipt + compact checkout -->
+    <aside class="receipt-panel">
+      <div class="receipt-head receipt-head-compact">
+        <h2>Current Order</h2>
+        <p id="rcpt-meta" class="rcpt-meta">No items</p>
+      </div>
+      <div class="receipt-note-wrap">
+        <input type="text" id="invoice-note" class="input receipt-note-input" placeholder="Invoice Note (optional)…" maxlength="256" autocomplete="off" aria-label="Invoice Note" />
+      </div>
+      <div id="rcpt-lines" class="receipt-lines"></div>
+      <div class="receipt-foot receipt-foot-mini receipt-foot-compact">
+        <div class="totals-block totals-mini">
+          <div class="totals-row"><span>Subtotal</span><div class="dual-amt"><div class="usd" id="sub-usd">$0.00</div><div class="lbp" id="sub-lbp">0 LBP</div></div></div>
+          <div id="disc-row" class="totals-row hidden"><span>Discount</span><div class="dual-amt"><div class="usd" id="disc-usd" style="color:var(--success)">-$0.00</div><div class="lbp" id="disc-lbp">0 LBP</div></div></div>
+          <div id="toters-row" class="totals-row hidden"><span id="platform-fee-label">Platform</span><div class="dual-amt"><div class="usd" id="toters-fee" style="color:var(--danger)">-$0.00</div><div class="lbp" id="toters-lbp">0 LBP</div></div></div>
+          <div class="total-grand total-grand-mini">
+            <span class="label">TOTAL</span>
+            <div><div class="usd" id="total-usd">$0.00</div><div class="lbp" id="total-lbp">0 LBP</div></div>
+          </div>
+        </div>
+        <div class="checkout-strip">
+          <select id="disc-type" class="select input-xs" title="Discount"><option value="percent" selected>Disc: %</option><option value="none">Disc: None</option><option value="flat_usd">Disc: $</option><option value="flat_lbp">Disc: LBP</option></select>
+          <input id="disc-val" type="number" step="0.01" min="0" class="input input-xs" placeholder="Disc %" />
+          <select id="sales-channel" class="select input-xs"><option value="in_store">In-Store</option><option value="toters">Toters</option><option value="talabna">Talabna</option><option value="markit">Markit</option></select>
+          <select id="settle-currency" class="select input-xs"><option value="USD">USD</option><option value="LBP">LBP</option></select>
+          <select id="pay-method" class="select input-xs"><option value="cash">Cash</option><option value="wish">Wish</option><option value="card">Card</option><option value="mobile">Mobile</option></select>
+          <input id="cash-tendered" type="number" step="0.01" class="input input-xs" placeholder="Tendered" />
+        </div>
+        <div id="change-due-wrap" class="change-due change-due-compact hidden">
+          <div class="change-due-label">Change Due</div>
+          <div class="change-due-amt"><span id="change-due-primary">$0.00</span><span id="change-due-secondary">0 LBP</span></div>
+        </div>
+        <div class="checkout-actions checkout-actions-primary">
+          <button id="btn-clear" class="btn btn-secondary btn-pos-action">Clear</button>
+          <button id="btn-pay" class="btn btn-primary btn-pos-action" disabled>Finalize Sale</button>
+        </div>
+      </div>
+    </aside>
+    <!-- Right: Categories + product grid -->
+    <main class="menu-panel">
+      <div id="pos-catalog-toolbar" class="pos-catalog-toolbar">
+        <input id="search-products" type="text" placeholder="Search products…" autocomplete="off" aria-label="Search products" />
+        <div class="pos-catalog-toolbar-actions" role="toolbar" aria-label="Order modifiers">
+          <button type="button" id="btn-mod-extra" class="cat-pill cat-pill-extra">+ EXTRAS</button>
+          <button type="button" id="btn-mod-exclude" class="cat-pill cat-pill-exclude">— EXCLUDES</button>
+        </div>
+      </div>
+      <div id="cat-bar" class="cat-bar"></div>
+      <div id="menu-grid" class="menu-grid"></div>
+    </main>
+  </div>
+</div>
+
+<div id="size-picker" class="size-picker-overlay hidden" aria-hidden="true">
+  <div class="size-picker-pop" role="dialog" aria-modal="true" aria-labelledby="size-picker-title">
+    <div id="size-picker-title" class="size-picker-title"></div>
+    <div class="size-picker-btns">
+      <button type="button" class="size-picker-btn" data-size="S"><span class="size-picker-lbl">[S]</span><span class="size-picker-pr" data-size-pr="S">—</span></button>
+      <button type="button" class="size-picker-btn size-picker-btn-m" data-size="M"><span class="size-picker-lbl">[M]</span><span class="size-picker-pr" data-size-pr="M">—</span></button>
+      <button type="button" class="size-picker-btn" data-size="L"><span class="size-picker-lbl">[L]</span><span class="size-picker-pr" data-size-pr="L">—</span></button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+<div id="print-area" class="hidden"></div>
+
+<script>
+(function initTheme(){
+  const t=localStorage.getItem('bob_theme')||'dark';
+  document.documentElement.setAttribute('data-theme',t);
+})();
+const Auth=BobAuth.create('pos');
+const MOD_EXTRA_CAT='__extras__';
+const MOD_EXCLUDE_CAT='__excludes__';
+const S={token:localStorage.getItem('bob_token'),user:JSON.parse(localStorage.getItem('bob_user')||'null'),shift:null,categories:[],menu:[],globalModifiers:[],cart:[],cartSel:0,cat:null,search:'',rate:89500,channelPct:{in_store:0,toters:22,talabna:15,markit:18},canAdmin:false,tenderedTouched:false,sizePickItem:null};
+const API={
+  req:(p,o)=>Auth.req(p,o),
+  login(u,p){const b=new FormData();b.append('username',u);b.append('password',p);return Auth.req('/api/auth/login',{method:'POST',body:b,headers:{'X-Bob-Portal':'pos'}});},
+  logout:()=>Auth.logout(),
+  session:()=>Auth.session(),
+  me:()=>API.req('/api/auth/me'),perms:()=>API.req('/api/users/permissions'),settings:()=>API.req('/api/finance/settings'),
+  shift:()=>API.req('/api/sales/shifts/current'),openShift:d=>API.req('/api/sales/shifts/open',{method:'POST',body:JSON.stringify(d)}),
+  closeShift:d=>API.req('/api/sales/shifts/close',{method:'POST',body:JSON.stringify(d)}),preview:id=>API.req(`/api/sales/shifts/${id}/preview`),
+  menu:()=>API.req('/api/sales/menu'),
+  order:p=>API.req('/api/sales/orders',{method:'POST',body:JSON.stringify(p)}),
+  printThermal:id=>API.req(`/api/sales/orders/${id}/print-thermal`,{method:'POST'}),
+  updateName:n=>API.req('/api/users/profile/full-name',{method:'PATCH',body:JSON.stringify({full_name:n})}),
+  updateUser:u=>API.req('/api/users/profile/username',{method:'PATCH',body:JSON.stringify({new_username:u})}),
+  updatePw:p=>API.req('/api/users/profile/password',{method:'PATCH',body:JSON.stringify(p)}),
+};
+const $=id=>document.getElementById(id);
+const fmt=n=>Number(n).toFixed(2);
+const fmtLbp=n=>Math.round(Number(n)).toLocaleString();
+const dual=(usd,rate)=>({usd:'$'+fmt(usd),lbp:fmtLbp(usd*rate)+' LBP'});
+function toast(m){$('toast').textContent=m;$('toast').classList.remove('hidden');setTimeout(()=>$('toast').classList.add('hidden'),2800);}
+function clearSession(showLogin=true){S.token=null;S.user=null;S.shift=null;S.cart=[];localStorage.removeItem('bob_token');localStorage.removeItem('bob_user');$('shift-screen').classList.add('hidden');$('pos-app').classList.add('hidden');$('pos-app').style.display='none';if(showLogin)location.href='/login';}
+async function logout(){await Auth.logout();S.token=null;clearSession(true);}
+async function enterPos(){
+  $('pos-app').classList.remove('hidden');$('pos-app').style.display='flex';
+  if(S.shift)$('shift-badge').textContent=`Shift #${S.shift.id} · $${fmt(S.shift.opening_float_usd)} / ${fmtLbp(S.shift.opening_float_usd*S.rate)} LBP`;
+  if(!S.menu.length){const catalog=await API.menu();S.categories=catalog.categories;S.menu=catalog.items;S.globalModifiers=catalog.global_modifiers||[];S.rate=+catalog.exchange_rate||S.rate;}
+  bindPosInteractions();
+  renderMenu();renderReceipt();
+}
+function cartLineKey(l){return JSON.stringify({id:l.menu_item_id,size:l.size??null,extras:l.extras||[],excludes:l.excludes||[]});}
+function itemHasMultiSize(it){
+  if(!it)return false;
+  const flag=it.sizes_enabled;
+  if(flag===true||flag===1||String(flag).toLowerCase()==='true')return true;
+  if(it.price_s!=null&&it.price_l!=null)return true;
+  return false;
+}
+function cardShowsMultiSize(card,it){
+  if(!card)return false;
+  if(card.dataset.multi==='1'||card.getAttribute('data-multi')==='1')return true;
+  if(it&&itemHasMultiSize(it))return true;
+  const txt=(card.textContent||'').toUpperCase();
+  if(txt.includes('S/M/L'))return true;
+  return false;
+}
+function menuItemById(id){return S.menu.find(m=>m.id===+id);}
+function openSizePicker(it){
+  if(!it)return;
+  S.sizePickItem=it;
+  $('size-picker-title').textContent=it.name;
+  ['S','M','L'].forEach(sz=>{
+    const prEl=$('size-picker').querySelector(`[data-size-pr="${sz}"]`);
+    if(prEl){
+      const p=itemSizePrice(it,sz);
+      const d=dual(p,S.rate);
+      prEl.textContent=d.usd+' · '+d.lbp;
+    }
+  });
+  const overlay=$('size-picker');
+  overlay.classList.remove('hidden');
+  overlay.setAttribute('aria-hidden','false');
+  overlay.style.display='flex';
+}
+function closeSizePicker(){
+  S.sizePickItem=null;
+  const el=$('size-picker');
+  if(!el)return;
+  el.classList.add('hidden');
+  el.setAttribute('aria-hidden','true');
+  el.style.display='';
+}
+function pickSizeAndAdd(size){
+  if(!S.sizePickItem)return;
+  addItemToCart(S.sizePickItem,size);
+}
+function handleProductClick(it,card){
+  if(!it)return;
+  if(cardShowsMultiSize(card,it))openSizePicker(it);
+  else addItemToCart(it,null);
+}
+function handleProductCardClick(card){
+  if(!card||!card.dataset.id)return;
+  const it=menuItemById(card.dataset.id);
+  if(!it){toast('Product not found');return;}
+  handleProductClick(it,card);
+}
+function bindMenuGridClicks(){
+  const grid=$('menu-grid');
+  if(!grid||grid._bobClickBound)return;
+  grid._bobClickBound=true;
+  grid.addEventListener('click',ev=>{
+    const card=ev.target.closest('.product-card');
+    if(!card||!card.dataset.id)return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    handleProductCardClick(card);
+  });
+}
+function itemDisplayPrice(it){
+  if(itemHasMultiSize(it))return itemSizePrice(it,'M');
+  return +it.unit_price||0;
+}
+function itemSizePrice(it,size){
+  const sz=size||'M';
+  const fb=+it.unit_price||0;
+  if(!itemHasMultiSize(it))return fb;
+  const map={S:it.price_s!=null?+it.price_s:fb,M:it.price_m!=null?+it.price_m:fb,L:it.price_l!=null?+it.price_l:fb};
+  return map[sz]??fb;
+}
+function sizedLineName(base,size){return size?`${base} (${size})`:base;}
+function addItemToCart(it,size){
+  const multi=itemHasMultiSize(it)||size!=null;
+  const lineSize=size??(itemHasMultiSize(it)?'M':null);
+  const price=lineSize?itemSizePrice(it,lineSize):+it.unit_price;
+  const displayName=sizedLineName(it.name,lineSize);
+  const blank={menu_item_id:it.id,name:displayName,base_name:it.name,size:lineSize,category:it.category,unit_price:price,qty:1,extras:[],excludes:[]};
+  const ex=S.cart.find(c=>cartLineKey(c)===cartLineKey(blank));
+  if(ex){ex.qty++;S.cartSel=S.cart.indexOf(ex);}
+  else{S.cart.push(blank);S.cartSel=S.cart.length-1;}
+  closeSizePicker();
+  renderReceipt();
+}
+function lineUnitTotal(l){const extra=(l.extras||[]).reduce((s,e)=>s+(+e.extra_price_usd||0),0);return (+l.unit_price+extra)*l.qty;}
+function cartSub(){return S.cart.reduce((s,l)=>s+lineUnitTotal(l),0);}
+function escHtml(s){return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function receiptModifierLines(l){
+  const rows=[];
+  (l.extras||[]).forEach(e=>rows.push('<div class="receipt-mod-line receipt-mod-extra">+ '+escHtml(e.name)+' <span class="receipt-mod-price">('+dual(+e.extra_price_usd||0,S.rate).usd+')</span></div>'));
+  (l.excludes||[]).forEach(e=>rows.push('<div class="receipt-mod-line receipt-mod-exclude">− No '+escHtml(e.name)+' <span class="receipt-mod-price">($0.00)</span></div>'));
+  return rows.join('');
+}
+function calcDisc(sub){
+  let t=$('disc-type').value;
+  const v=+$('disc-val').value||0;
+  if(v<=0)return 0;
+  if(t==='none')t='percent';
+  if(t==='percent')return Math.min(sub,sub*Math.min(v,100)/100);
+  if(t==='flat_usd')return Math.min(sub,v);
+  if(t==='flat_lbp')return Math.min(sub,v/S.rate);
+  return 0;
+}
+function channelPct(){return S.channelPct[$('sales-channel').value]||0;}
+function channelLabel(ch){return{in_store:'In-Store',toters:'Toters',talabna:'Talabna',markit:'Markit'}[ch]||ch;}
+function calcTotals(){const sub=cartSub();const disc=calcDisc(sub);const after=sub-disc;const pct=channelPct();const fee=pct>0?after*pct/100:0;const net=after-fee;return{sub,disc,fee,net,lbp:Math.round(net*S.rate),pct};}
+function updateChangeDue(){
+  const wrap=$('change-due-wrap');const isCash=$('pay-method').value==='cash';
+  if(!isCash){wrap.classList.add('hidden');return;}
+  const{net,lbp}=calcTotals();const cur=$('settle-currency').value;
+  const tendered=+$('cash-tendered').value;
+  if(!tendered||isNaN(tendered)){wrap.classList.add('hidden');return;}
+  const due=cur==='USD'?net:lbp;
+  const change=tendered-due;
+  if(change<0){wrap.classList.add('hidden');return;}
+  wrap.classList.remove('hidden');
+  if(cur==='USD'){
+    $('change-due-primary').textContent='$'+fmt(change);
+    $('change-due-secondary').textContent=fmtLbp(change*S.rate)+' LBP';
+  }else{
+    $('change-due-primary').textContent=fmtLbp(change)+' LBP';
+    $('change-due-secondary').textContent='$'+fmt(change/S.rate);
+  }
+}
+function updateReceiptTotals(){
+  const{sub,disc,fee,net,lbp,pct}=calcTotals();const ch=$('sales-channel').value;const isDelivery=pct>0;
+  const ds=dual(sub,S.rate),dd=dual(disc,S.rate),df=dual(fee,S.rate),dn=dual(net,S.rate);
+  $('sub-usd').textContent=ds.usd;$('sub-lbp').textContent=ds.lbp;
+  $('disc-row').classList.toggle('hidden',disc<=0);
+  $('disc-usd').textContent='-'+dd.usd.replace('$','-$');$('disc-lbp').textContent=disc>0?'-'+fmtLbp(disc*S.rate)+' LBP':'0 LBP';
+  $('toters-row').classList.toggle('hidden',!isDelivery||fee<=0);
+  $('platform-fee-label').textContent=channelLabel(ch)+' ('+pct+'%)';
+  $('toters-fee').textContent='-'+df.usd.replace('$','-$');$('toters-lbp').textContent=fee>0?'-'+fmtLbp(fee*S.rate)+' LBP':'0 LBP';
+  $('total-usd').textContent=dn.usd;$('total-lbp').textContent=dn.lbp;
+  $('rcpt-meta').textContent=S.cart.length?`${S.cart.reduce((a,l)=>a+l.qty,0)} items`: 'Select products →';
+  $('btn-pay').disabled=!S.cart.length||!S.shift;
+  $('channel-badge').textContent=isDelivery?channelLabel(ch)+' Delivery':'In-Store';
+  if($('pay-method').value==='cash'&&document.activeElement?.id!=='cash-tendered'&&!S.tenderedTouched){
+    const cur=$('settle-currency').value;$('cash-tendered').value=cur==='USD'?fmt(net):lbp;
+  }
+  updateChangeDue();
+}
+function renderCartLines(){
+  const el=$('rcpt-lines');
+  if(!el)return;
+  if(!S.cart.length){el.innerHTML='<p class="receipt-empty">Receipt empty</p>';return;}
+  el.innerHTML=S.cart.map((l,i)=>{
+    const lt=lineUnitTotal(l);const d=dual(lt,S.rate);const sel=i===S.cartSel?' receipt-line-block-selected':'';
+    const mods=receiptModifierLines(l);
+    return '<div class="receipt-line-block'+sel+'" data-sel="'+i+'"><div class="receipt-line"><div><div class="receipt-line-name">'+escHtml(l.name)+'</div><div class="receipt-line-cat">'+escHtml(l.category||'')+'</div></div><div class="qty-ctrl"><button class="btn btn-secondary btn-sm" data-m="'+i+'">−</button><span class="receipt-qty">'+l.qty+'</span><button class="btn btn-secondary btn-sm" data-p="'+i+'">+</button></div><div class="line-prices"><div class="usd">'+d.usd+'</div><div class="lbp">'+d.lbp+'</div></div></div>'+(mods?'<div class="receipt-modifiers">'+mods+'</div>':'')+'</div>';
+  }).join('');
+  el.querySelectorAll('[data-sel]').forEach(row=>row.onclick=e=>{
+    if(e.target.closest('button'))return;
+    S.cartSel=+row.dataset.sel;
+    renderReceipt();
+  });
+  el.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{
+    const i=+b.dataset.m;S.cart[i].qty--;
+    if(S.cart[i].qty<=0){S.cart.splice(i,1);if(S.cartSel>=S.cart.length)S.cartSel=Math.max(0,S.cart.length-1);}
+    renderReceipt();
+  });
+  el.querySelectorAll('[data-p]').forEach(b=>b.onclick=()=>{S.cart[+b.dataset.p].qty++;renderReceipt();});
+}
+function renderReceipt(){
+  updateReceiptTotals();
+  renderCartLines();
+}
+function applyGlobalModifier(mod,asExtra){
+  if(!S.cart.length){toast('Add a product first');return;}
+  const line=S.cart[S.cartSel];
+  if(!line){toast('Select an order line');return;}
+  const invId=mod.inventory_item_id;
+  const qty=+mod.quantity_per_sale||1;
+  if(asExtra){
+    const idx=(line.extras||[]).findIndex(e=>e.global_modifier_id===mod.id);
+    if(idx>=0){line.extras.splice(idx,1);toast('Removed '+mod.name);}
+    else{
+      line.excludes=(line.excludes||[]).filter(e=>e.global_modifier_id!==mod.id&&e.inventory_item_id!==invId);
+      line.extras=line.extras||[];
+      line.extras.push({global_modifier_id:mod.id,inventory_item_id:invId,name:mod.name,quantity:qty,extra_price_usd:+mod.extra_price_usd||0});
+      toast('Added '+mod.name);
+    }
+  }else{
+    const idx=(line.excludes||[]).findIndex(e=>e.global_modifier_id===mod.id);
+    if(idx>=0){line.excludes.splice(idx,1);toast('Removed No '+mod.name);}
+    else{
+      line.extras=(line.extras||[]).filter(e=>e.global_modifier_id!==mod.id&&e.inventory_item_id!==invId);
+      line.excludes=line.excludes||[];
+      line.excludes.push({global_modifier_id:mod.id,inventory_item_id:invId,name:mod.name,quantity:qty});
+      toast('No '+mod.name);
+    }
+  }
+  renderReceipt();
+}
+function renderMenu(){
+  const cats=S.categories.length?S.categories:[{id:null,name:'Juice'},{id:null,name:'Crepe'},{id:null,name:'Cocktails'},{id:null,name:'Smoothies'}];
+  const isModView=S.cat===MOD_EXTRA_CAT||S.cat===MOD_EXCLUDE_CAT;
+  if(!S.cat||(!isModView&&!cats.some(c=>c.name===S.cat)))S.cat=cats[0]?.name;
+  $('btn-mod-extra')?.classList.toggle('active',S.cat===MOD_EXTRA_CAT);
+  $('btn-mod-exclude')?.classList.toggle('active',S.cat===MOD_EXCLUDE_CAT);
+  $('cat-bar').innerHTML=cats.map(c=>'<button type="button" class="cat-pill '+(S.cat===c.name?'active':'')+'" data-c="'+escHtml(c.name)+'">'+escHtml(c.name)+'</button>').join('');
+  $('cat-bar').querySelectorAll('[data-c]').forEach(b=>b.onclick=()=>{S.cat=b.dataset.c;S.search='';const s=$('search-products');if(s)s.value='';renderMenu();});
+  const q=S.search.trim().toLowerCase();
+  const grid=$('menu-grid');
+  if(S.cat===MOD_EXTRA_CAT||S.cat===MOD_EXCLUDE_CAT){
+    const asExtra=S.cat===MOD_EXTRA_CAT;
+    const mods=(S.globalModifiers||[]).filter(m=>!q||m.name.toLowerCase().includes(q));
+    const tileClass=asExtra?'menu-tile menu-tile-mod-extra':'menu-tile menu-tile-mod-exclude';
+    grid.innerHTML=mods.length?mods.map(m=>{
+      const price=asExtra?dual(+m.extra_price_usd||0,S.rate).usd:'$0.00';
+      return '<button type="button" class="'+tileClass+'" data-mod="'+m.id+'"><div class="name">'+escHtml(m.name)+'</div><div class="cat-tag">'+(asExtra?'Extra':'Exclude')+'</div><div class="price">'+price+'</div></button>';
+    }).join(''):'<p class="menu-grid-empty">'+(mods.length===0&&!q?'No global modifiers — configure in Admin':'No matches')+'</p>';
+    grid.querySelectorAll('[data-mod]').forEach(b=>b.onclick=()=>{const m=(S.globalModifiers||[]).find(x=>x.id===+b.dataset.mod);if(m)applyGlobalModifier(m,asExtra);});
+    return;
+  }
+  let items=S.menu.filter(m=>m.category===S.cat);
+  if(q)items=S.menu.filter(m=>m.name.toLowerCase().includes(q));
+  grid.innerHTML=items.length?items.map(it=>{
+    const p=itemDisplayPrice(it);
+    const d=dual(p,S.rate);
+    const multi=itemHasMultiSize(it);
+    return '<button type="button" class="menu-tile product-card'+(multi?' menu-tile--multi':'')+'" data-id="'+it.id+'" data-multi="'+(multi?'1':'0')+'"><div class="name">'+escHtml(it.name)+'</div><div class="cat-tag">'+escHtml(it.category)+(multi?' · S/M/L':'')+'</div><div class="price">'+d.usd+'</div><div class="price-lbp">'+d.lbp+'</div></button>';
+  }).join(''):'<p class="menu-grid-empty">'+(q?'No matches':'No products in '+escHtml(S.cat))+'</p>';
+}
+function bindPosInteractions(){
+  if(S._posBound)return;
+  S._posBound=true;
+  bindMenuGridClicks();
+  $('btn-mod-extra')?.addEventListener('click',()=>{S.cat=MOD_EXTRA_CAT;S.search='';const s=$('search-products');if(s)s.value='';renderMenu();});
+  $('btn-mod-exclude')?.addEventListener('click',()=>{S.cat=MOD_EXCLUDE_CAT;S.search='';const s=$('search-products');if(s)s.value='';renderMenu();});
+  const picker=$('size-picker');
+  picker?.querySelector('.size-picker-pop')?.addEventListener('click',e=>e.stopPropagation());
+  picker?.addEventListener('click',e=>{if(e.target===picker)closeSizePicker();});
+  picker?.querySelectorAll('[data-size]').forEach(btn=>{
+    btn.onclick=ev=>{
+      ev.preventDefault();
+      ev.stopPropagation();
+      if(S.sizePickItem)pickSizeAndAdd(btn.dataset.size);
+    };
+  });
+  document.addEventListener('keydown',e=>{
+    if(e.key==='Escape'&&S.sizePickItem)closeSizePicker();
+  });
+  $('search-products')?.addEventListener('input',e=>{S.search=e.target.value;renderMenu();});
+}
+function orderDiscountType(){
+  const v=+$('disc-val').value||0;
+  let t=$('disc-type').value;
+  if(v>0&&t==='none')t='percent';
+  return t;
+}
+function validateCashTender(){
+  if($('pay-method').value!=='cash')return true;
+  const{net,lbp}=calcTotals();
+  const cur=$('settle-currency').value;
+  const tendered=+$('cash-tendered').value;
+  const due=cur==='USD'?net:lbp;
+  if(!Number.isFinite(tendered)||tendered<=0){toast('Enter amount tendered');return false;}
+  if(tendered+0.001<due){toast(cur==='USD'?'Insufficient cash tendered':'Insufficient LBP tendered');return false;}
+  return true;
+}
+function buildOrderPayload(){
+  const cur=$('settle-currency').value;
+  const note=$('invoice-note').value.trim()||null;
+  const payload={
+    payment_method:$('pay-method').value,
+    sales_channel:$('sales-channel').value,
+    settlement_currency:cur,
+    discount_type:orderDiscountType(),
+    discount_value:+$('disc-val').value||0,
+    notes:note,
+    lines:S.cart.map(c=>{
+      const line={
+        menu_item_id:c.menu_item_id,
+        quantity:Math.max(1,Math.round(+c.qty||1)),
+        extras:(c.extras||[]).filter(e=>e&&e.inventory_item_id).map(e=>({
+          inventory_item_id:+e.inventory_item_id,
+          quantity:Math.max(0.001,+e.quantity||1),
+          extra_price_usd:Math.max(0,+e.extra_price_usd||0),
+          name:e.name||'Extra'
+        })),
+        excludes:(c.excludes||[]).filter(e=>e&&e.inventory_item_id).map(e=>({
+          inventory_item_id:+e.inventory_item_id,
+          quantity:Math.max(0.001,+e.quantity||1),
+          name:e.name||'Exclude'
+        }))
+      };
+      if(c.size)line.size=c.size;
+      return line;
+    })
+  };
+  if(payload.payment_method==='cash')payload.amount_tendered=cur==='USD'?+$('cash-tendered').value:+$('cash-tendered').value;
+  return payload;
+}
+function resetCheckoutFields(){
+  $('disc-val').value='';
+  $('disc-type').value='percent';
+  $('cash-tendered').value='';
+  $('invoice-note').value='';
+}
+
+const RECEIPT_SHOP={name:'BOB JUICE',tagline:'Fresh · Natural · Bold',tel:'70 613 481',closing:'Thank you for visiting BOB JUICE!',subclosing:'Enjoy your drink!'};
+
+function receiptBodyHtml(inv){
+  const saleLabel=inv.sale_number?`#${inv.sale_number}`:(inv.invoice_number||'');
+  const when=inv.finalized_at?new Date(inv.finalized_at).toLocaleString():new Date().toLocaleString();
+  const channel=(inv.sales_channel||'in_store').replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+  let linesHtml='';
+  (inv.items||[]).forEach(l=>{
+    linesHtml+=`<div class="receipt-print-line"><span>${l.quantity}× ${escHtml(l.name_snapshot)}</span><span>$${fmt(l.line_total)}</span></div>`;
+    try{
+      const mods=JSON.parse(l.line_modifiers_json||'{}');
+      (mods.extras||[]).forEach(e=>{
+        linesHtml+=`<div class="receipt-print-mod receipt-print-mod-extra">+ ${escHtml(e.name||'Extra')} ($${fmt(e.extra_price_usd||0)})</div>`;
+      });
+      (mods.excludes||[]).forEach(e=>{
+        linesHtml+=`<div class="receipt-print-mod receipt-print-mod-exclude">− No ${escHtml(e.name||'Item')} ($0.00)</div>`;
+      });
+    }catch(_){}
+  });
+  const disc=+inv.discount_amount_usd||0;
+  const comm=+inv.toters_commission_amount||0;
+  const note=(inv.notes||'').trim();
+  const change=inv.change_given!=null&&+inv.change_given>0?`<div class="receipt-print-line"><span>Change</span><span>$${fmt(inv.change_given)}</span></div>`:'';
+  return `<div class="receipt-print-root">
+    <div class="receipt-print-logo"><img src="/static/logo_circular.png" alt="BOB JUICE" class="receipt-logo-circle" /></div>
+    <div class="receipt-print-tagline">${RECEIPT_SHOP.tagline}<br/>Tel: ${RECEIPT_SHOP.tel}</div>
+    <hr class="receipt-print-hr"/>
+    <div class="receipt-print-meta">Invoice ${escHtml(saleLabel)}<br/>${escHtml(when)}<br/>Channel: ${escHtml(channel)}</div>
+    <hr class="receipt-print-hr"/>
+    ${linesHtml||'<div>No items</div>'}
+    <hr class="receipt-print-hr"/>
+    <div class="receipt-print-line"><span>Subtotal</span><span>$${fmt(inv.subtotal_usd)} / ${fmtLbp(inv.subtotal_lbp)} LBP</span></div>
+    ${disc>0?`<div class="receipt-print-line"><span>Discount</span><span>-$${fmt(disc)}</span></div>`:''}
+    ${comm>0?`<div class="receipt-print-line"><span>Platform</span><span>-$${fmt(comm)}</span></div>`:''}
+    <div class="receipt-print-line receipt-print-total"><span>TOTAL</span><span>$${fmt(inv.net_total_usd)} / ${fmtLbp(inv.net_total_lbp)} LBP</span></div>
+    ${change}
+    ${note?`<hr class="receipt-print-hr"/><div class="receipt-print-meta"><strong>Note:</strong><br/>${escHtml(note)}</div>`:''}
+    <div class="receipt-print-footer">${RECEIPT_SHOP.closing}<br/>${RECEIPT_SHOP.subclosing}</div>
+  </div>`;
+}
+
+function receiptPrintWidth(){
+  return getComputedStyle(document.documentElement).getPropertyValue('--receipt-print-width').trim()||'80mm';
+}
+
+function thermalReceiptCss(width){
+  return `@page{size:${width} auto;margin:0;}
+html,body{width:${width};max-width:${width};margin:0;padding:0;background:#fff;color:#000;
+font-family:'Courier New',Courier,monospace;font-size:12px;line-height:1.35;
+-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+*{box-sizing:border-box;}
+.receipt-print-root{width:100%;padding:2mm 3mm;page-break-inside:avoid;}
+.receipt-print-logo{text-align:center;margin:0 0 4px;}
+.receipt-print-logo img,.receipt-logo-circle{border-radius:50%!important;object-fit:cover!important;width:80px!important;height:80px!important;border:2px solid #334e4e!important;display:inline-block!important;}
+.receipt-print-brand{text-align:center;font-weight:800;font-size:14px;margin-bottom:2px;}
+.receipt-print-tagline{text-align:center;font-size:10px;margin-bottom:4px;}
+.receipt-print-meta{font-size:10px;margin-bottom:6px;}
+.receipt-print-hr{border:none;border-top:1px dashed #000;margin:6px 0;}
+.receipt-print-line{display:flex;justify-content:space-between;gap:4px;margin:2px 0;word-break:break-word;}
+.receipt-print-mod{font-size:10px;padding-left:8px;margin:1px 0;}
+.receipt-print-mod-extra{color:#166534;}.receipt-print-mod-exclude{color:#991b1b;}
+.receipt-print-total{font-weight:800;font-size:13px;margin-top:4px;}
+.receipt-print-footer{text-align:center;font-size:11px;margin-top:8px;font-weight:700;}
+@media print{
+@page{size:${width} auto;margin:0;}
+html,body{width:${width}!important;max-width:${width}!important;margin:0!important;padding:0!important;}
+.receipt-print-root{page-break-inside:avoid;page-break-after:auto;}
+}`;
+}
+
+function receiptDocumentHtml(inv){
+  const w=receiptPrintWidth();
+  const label=inv.sale_number?`#${inv.sale_number}`:(inv.invoice_number||'Receipt');
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>${escHtml(label)}</title>
+<style>${thermalReceiptCss(w)}</style></head><body>${receiptBodyHtml(inv)}</body></html>`;
+}
+
+function firePrintCommand(printWin){
+  if(!printWin)return false;
+  const doc=printWin.document;
+  printWin.focus();
+  let fired=false;
+  try{
+    if(doc&&typeof doc.execCommand==='function'){
+      fired=!!doc.execCommand('print',false,null);
+    }
+  }catch(_){}
+  if(!fired){
+    try{printWin.print();fired=true;}catch(_){}
+  }
+  return fired;
+}
+
+function printReceiptDirect(inv){
+  return new Promise((resolve,reject)=>{
+    const html=receiptDocumentHtml(inv);
+    const iframe=document.createElement('iframe');
+    iframe.name='bob-receipt-'+Date.now();
+    iframe.setAttribute('aria-hidden','true');
+    iframe.style.cssText='position:fixed;left:0;top:0;width:1px;height:1px;border:0;opacity:0;pointer-events:none;z-index:-1';
+    document.body.appendChild(iframe);
+    const printWin=iframe.contentWindow;
+    if(!printWin||!printWin.document){
+      iframe.remove();
+      reject(new Error('Print frame unavailable'));
+      return;
+    }
+    printWin.document.open();
+    printWin.document.write(html);
+    printWin.document.close();
+    const launch=()=>{
+      try{
+        if('onafterprint' in printWin)printWin.onafterprint=()=>setTimeout(()=>iframe.remove(),600);
+        else setTimeout(()=>iframe.remove(),1200);
+        firePrintCommand(printWin);
+        resolve({method:'iframe'});
+      }catch(err){
+        iframe.remove();
+        reject(err);
+      }
+    };
+    if(printWin.document.readyState==='complete')setTimeout(launch,60);
+    else iframe.onload=()=>setTimeout(launch,60);
+  });
+}
+
+async function printReceiptAfterSale(inv){
+  if(inv.thermal_print&&inv.thermal_print.printed)return {method:'thermal'};
+  return printReceiptDirect(inv);
+}
+
+function receiptHtml(inv,title){return receiptBodyHtml(inv);}
+async function boot(){
+  try{
+  bindPosInteractions();
+  S.token=localStorage.getItem('bob_token');
+  const[perms,sett]=await Promise.all([API.perms(),API.settings()]);
+  S.rate=+sett.exchange_rate_usd_lbp;S.channelPct={in_store:0,toters:+sett.toters_commission_pct,talabna:+sett.talabna_commission_pct,markit:+sett.markit_commission_pct};S.canAdmin=perms.permissions.admin_dashboard;
+  $('rate-display').textContent=fmtLbp(S.rate);$('toters-display').textContent=fmt(S.channelPct.toters);
+  $('hdr-user').textContent=`${S.user.full_name} · ${perms.role_label}`;
+  $('btn-admin').classList.toggle('hidden',!S.canAdmin);
+  S.shift=await API.shift();
+  if(!S.shift){$('shift-screen').classList.remove('hidden');$('pos-app').classList.add('hidden');$('pos-app').style.display='none';return;}
+  $('shift-screen').classList.add('hidden');
+  $('pos-app').classList.remove('hidden');$('pos-app').style.display='flex';
+  $('shift-badge').textContent=`Shift #${S.shift.id} · $${fmt(S.shift.opening_float_usd)} / ${fmtLbp(S.shift.opening_float_usd*S.rate)} LBP`;
+  const catalog=await API.menu();S.categories=catalog.categories;S.menu=catalog.items;S.globalModifiers=catalog.global_modifiers||[];S.rate=+catalog.exchange_rate||S.rate;
+  bindPosInteractions();
+  renderMenu();renderReceipt();
+  }catch(err){BobUI.toastErr(err,'POS');throw err;}
+}
+$('theme-toggle').onclick=()=>{const n=document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',n);localStorage.setItem('bob_theme',n);};
+$('shift-form').onsubmit=async e=>{
+  e.preventDefault();
+  const btn=e.target.querySelector('[type=submit]');
+  const usd=+$('float-usd').value;
+  const lbp=+$('float-lbp').value;
+  if(!Number.isFinite(usd)||usd<0||!Number.isFinite(lbp)||lbp<0){toast('Enter valid opening float amounts');return;}
+  await BobUI.withBusy(btn,async()=>{
+    try{
+      S.shift=await API.openShift({opening_float_usd:usd,opening_float_lbp:lbp});
+      $('shift-screen').classList.add('hidden');
+      await enterPos();
+      toast('Shift opened');
+    }catch(err){
+      const msg=err?.message==='session_expired'?'Session expired — please sign in again':err;
+      BobUI.toastErr(msg);
+    }
+  });
+};
+$('btn-close-shift').onclick=async()=>{
+  if(!S.shift)return;
+  await BobUI.withBusy($('btn-close-shift'),async()=>{
+    try{
+      const p=await API.preview(S.shift.id);
+      $('close-preview').innerHTML=`<div><strong>Shift #${p.shift_id}</strong> · ${p.invoice_count} invoices</div><div>Expected: <strong>$${fmt(p.expected_cash_usd)}</strong> / ${fmtLbp(p.expected_cash_lbp)} LBP</div><div>Sales: $${fmt(p.total_sales_usd)} / ${fmtLbp(p.total_sales_lbp)} LBP</div>`;
+      $('count-usd').value=fmt(p.expected_cash_usd);$('count-lbp').value=Math.round(+p.expected_cash_lbp);
+      $('close-screen').classList.remove('hidden');
+    }catch(err){BobUI.toastErr(err);}
+  });
+};
+$('close-cancel').onclick=()=>$('close-screen').classList.add('hidden');
+$('close-form').onsubmit=async e=>{
+  e.preventDefault();
+  const btn=e.target.querySelector('[type=submit]');
+  const usd=+$('count-usd').value;
+  const lbp=+$('count-lbp').value;
+  if(!Number.isFinite(usd)||usd<0||!Number.isFinite(lbp)||lbp<0){toast('Enter valid counted cash amounts');return;}
+  await BobUI.withBusy(btn,async()=>{
+    try{
+      await API.closeShift({counted_cash_usd:usd,counted_cash_lbp:lbp,closing_notes:$('close-notes').value||null});
+      $('close-screen').classList.add('hidden');
+      toast('Shift closed — logging out');
+      await logout();
+    }catch(err){BobUI.toastErr(err);}
+  });
+};
+['sales-channel','settle-currency','disc-type'].forEach(id=>$(id).onchange=()=>{S.tenderedTouched=false;renderReceipt();});
+$('disc-val').oninput=renderReceipt;
+$('cash-tendered').addEventListener('input',()=>{S.tenderedTouched=true;updateChangeDue();});
+function syncTenderedVisibility(){const cash=$('pay-method').value==='cash';$('cash-tendered').style.display=cash?'block':'none';if(!cash)$('change-due-wrap').classList.add('hidden');}
+$('pay-method').onchange=()=>{S.tenderedTouched=false;syncTenderedVisibility();renderReceipt();};
+$('settle-currency').onchange=()=>{S.tenderedTouched=false;renderReceipt();};
+syncTenderedVisibility();
+$('btn-clear').onclick=()=>{S.cart=[];S.cartSel=0;S.tenderedTouched=false;resetCheckoutFields();renderReceipt();};
+$('btn-pay').onclick=async()=>{
+  if(!S.cart.length||!S.shift)return;
+  if(!validateCashTender())return;
+  const btn=$('btn-pay');
+  closeSizePicker();
+  await BobUI.withBusy(btn,async()=>{
+    try{
+      const inv=await API.order(buildOrderPayload());
+      S.cart=[];S.cartSel=0;S.tenderedTouched=false;
+      resetCheckoutFields();
+      renderReceipt();
+      const label=inv.sale_number?`#${inv.sale_number}`:(inv.invoice_number||'');
+      printReceiptAfterSale(inv).then(r=>{
+        toast(r.method==='thermal'?`Sale ${label} — printed`:`Sale ${label} — complete`);
+      }).catch(()=>{
+        toast(`Sale ${label} saved`);
+      });
+    }catch(err){BobUI.toastErr(err,'Checkout failed');}
+  });
+  btn.disabled=!S.cart.length||!S.shift;
+};
+$('btn-logout').onclick=logout;
+$('btn-profile').onclick=()=>{$('prof-name').value=S.user.full_name;$('prof-user').value=S.user.username;$('profile-screen').classList.remove('hidden');};
+$('prof-close').onclick=()=>$('profile-screen').classList.add('hidden');
+$('prof-name-form').onsubmit=async e=>{e.preventDefault();try{const u=await API.updateName($('prof-name').value);S.user.full_name=u.full_name;localStorage.setItem('bob_user',JSON.stringify(S.user));toast('Saved');}catch(err){toast(err.message);}};
+$('prof-user-form').onsubmit=async e=>{e.preventDefault();try{const d=await API.updateUser($('prof-user').value.trim().toLowerCase());S.token=d.access_token;S.user.username=d.username;localStorage.setItem('bob_token',S.token);localStorage.setItem('bob_user',JSON.stringify(S.user));toast('Username updated');}catch(err){toast(err.message);}};
+$('prof-pw-form').onsubmit=async e=>{e.preventDefault();if($('pw-new').value!==$('pw-conf').value){toast('Passwords mismatch');return;}try{await API.updatePw({current_password:$('pw-cur').value,new_password:$('pw-new').value,confirm_password:$('pw-conf').value});$('pw-cur').value=$('pw-new').value=$('pw-conf').value='';toast('Password changed');}catch(err){toast(err.message);}};
+$('denied-ok').onclick=()=>$('access-denied').classList.add('hidden');
+async function restoreSession(){
+  await BobTabSession.whenReady();
+  const r=await Auth.restore();
+  if(!r.ok){location.href='/login';return;}
+  BobTabSession.markTabOpen('pos');
+  S.token=localStorage.getItem('bob_token');
+  S.user=r.user;
+  await boot();
+}
+(async()=>{bindPosInteractions();try{await restoreSession();}catch(err){BobUI.toastErr(err,'POS session');location.href='/login';}})();
+</script>
+</body>
+</html>
