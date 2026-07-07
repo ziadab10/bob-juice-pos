@@ -1,17 +1,15 @@
-# BOB JUICE POS — production dependencies
-fastapi==0.115.6
-uvicorn[standard]==0.32.1
-sqlalchemy[asyncio]==2.0.36
-aiosqlite==0.20.0
-pydantic==2.10.3
-pydantic-settings==2.6.1
-python-jose[cryptography]==3.3.0
-cryptography>=42.0.0
-passlib[bcrypt]==1.7.4
-bcrypt==4.0.1
-python-multipart==0.0.20
-fpdf2==2.8.2
-Pillow>=10.0.0
-httpx==0.28.1
-python-escpos==3.1
-pywin32>=306; sys_platform == "win32"
+fastapi
+uvicorn[standard]
+sqlalchemy[asyncio]
+aiosqlite
+pydantic
+pydantic-settings
+python-jose[cryptography]
+cryptography
+passlib[bcrypt]
+bcrypt
+python-multipart
+fpdf2
+Pillow
+httpx
+python-escpos
